@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "ia747",
+  "version": "${version}",
+  "name": "Immersive Aircraft: Boeing 747",
+  "description": "A large Boeing 747-400 inspired airliner addon for Immersive Aircraft.",
+  "authors": [
+    "OpenAI"
+  ],
+  "contact": {},
+  "license": "GPL-3.0-or-later",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "dev.openai.ia747.Boeing747Addon"
+    ],
+    "client": [
+      "dev.openai.ia747.client.Boeing747Client"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.5",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*",
+    "immersive_aircraft": ">=1.5.2"
+  }
+}
