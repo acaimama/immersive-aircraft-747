@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": ["EHE","HGH","EHE"],
+  "key": {
+    "E": {"item":"immersive_aircraft:engine"},
+    "H": {"item":"immersive_aircraft:hull"},
+    "G": {"item":"immersive_aircraft:gyroscope"}
+  },
+  "result": {"id":"ia747:boeing_747_400","count":1},
+  "show_notification": true
+}
