@@ -17,11 +17,16 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public final class Boeing747Renderer extends AircraftEntityRenderer<Boeing747Entity> {
     private static final ResourceLocation MODEL_ID = Boeing747Addon.id("boeing_747_400");
 
     private final ModelPartRenderHandler<Boeing747Entity> model = new ModelPartRenderHandler<>();
     private final BlockRenderDispatcher blocks = Minecraft.getInstance().getBlockRenderer();
+    private final Map<Integer, Float> fanAngles = new HashMap<>();
+    private final Map<Integer, Integer> fanLastTicks = new HashMap<>();
 
     public Boeing747Renderer(EntityRendererProvider.Context context) {
         super(context);
@@ -146,13 +151,29 @@ public final class Boeing747Renderer extends AircraftEntityRenderer<Boeing747Ent
         BlockState spinner = Blocks.IRON_BLOCK.defaultBlockState();
 
         float power = entity.getEnginePower();
-        float speed = (float) entity.getDeltaMovement().length();
-        float angle = (entity.tickCount + tickDelta) * (20.0F + power * 240.0F + speed * 420.0F);
+        int id = entity.getId();
+        int currentTick = entity.tickCount;
+        int previousTick = fanLastTicks.getOrDefault(id, currentTick);
+        float baseAngle = fanAngles.getOrDefault(id, 0.0F);
 
-        fan(p,b,light,fan,spinner,-6.25F,0.75F,-0.31F,angle);
-        fan(p,b,light,fan,spinner,-3.44F,0.81F, 0.63F,angle + 13.0F);
-        fan(p,b,light,fan,spinner, 3.44F,0.81F, 0.63F,angle + 27.0F);
-        fan(p,b,light,fan,spinner, 6.25F,0.75F,-0.31F,angle + 41.0F);
+        // Real turbofan behavior: parked / engine-off = stationary fan.
+        // Once the engine actually spools, rotation ramps with engine power.
+        if (currentTick != previousTick && power > 0.012F) {
+            int elapsedTicks = Math.max(1, currentTick - previousTick);
+            float degreesPerTick = 4.0F + power * 92.0F;
+            baseAngle = (baseAngle + degreesPerTick * elapsedTicks) % 360.0F;
+            fanAngles.put(id, baseAngle);
+        }
+        fanLastTicks.put(id, currentTick);
+
+        float previewAdvance = power > 0.012F ? (4.0F + power * 92.0F) * tickDelta : 0.0F;
+        float angle = baseAngle + previewAdvance;
+
+        // z values below are the actual fan planes just behind each intake lip.
+        fan(p,b,light,fan,spinner,-6.25F,0.75F,-0.36F,angle);
+        fan(p,b,light,fan,spinner,-3.44F,0.81F, 0.57F,angle + 13.0F);
+        fan(p,b,light,fan,spinner, 3.44F,0.81F, 0.57F,angle + 27.0F);
+        fan(p,b,light,fan,spinner, 6.25F,0.75F,-0.36F,angle + 41.0F);
     }
 
     private void fan(
@@ -160,10 +181,11 @@ public final class Boeing747Renderer extends AircraftEntityRenderer<Boeing747Ent
             BlockState fan, BlockState spinner,
             float x, float y, float z, float angle
     ) {
-        for (int i = 0; i < 6; i++) {
-            cuboid(p,b,light,fan,x,y,z+1.26F,0.10F,0.83F,0.08F,0,0,angle + i*30.0F);
+        // The fan disc is recessed inside the nacelle; z is already the intake-plane position.
+        for (int i = 0; i < 8; i++) {
+            cuboid(p,b,light,fan,x,y,z,0.085F,0.78F,0.055F,0,0,angle + i*22.5F);
         }
-        cuboid(p,b,light,spinner,x,y,z+1.31F,0.24F,0.24F,0.18F,0,0,0);
+        cuboid(p,b,light,spinner,x,y,z+0.025F,0.22F,0.22F,0.085F,0,0,0);
     }
 
     private void renderFlaps(Boeing747Entity entity, PoseStack p, MultiBufferSource b, int light) {
