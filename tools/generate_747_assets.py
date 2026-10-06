@@ -47,37 +47,58 @@ def harmonics(t, parts):
     return sum(amp * math.sin(math.tau * freq * t + phase) for freq, amp, phase in parts)
 
 idle = harmonic_set([
-    (50, .36), (100, .18), (150, .09), (350, .13),
-    (700, .09), (900, .055), (1150, .035), (1450, .022)
+    (42, .46), (84, .24), (126, .12), (210, .10),
+    (315, .07), (420, .045), (630, .025)
 ], 7471)
-thrust = harmonic_set([
-    (62.5, .36), (125, .18), (250, .10), (500, .15),
-    (750, .10), (1000, .08), (1500, .06), (2000, .045),
-    (3000, .032), (4000, .018)
-], 7472)
-inside = harmonic_set([(50,.50),(100,.24),(150,.10),(250,.06),(400,.035)], 7473)
-distant = harmonic_set([(37.5,.56),(75,.28),(112.5,.12),(187.5,.06),(300,.025)], 7474)
 
-make_ogg("jet_idle", 4.0, lambda t: harmonics(t, idle) * (0.97 + 0.03 * math.sin(math.pi*t)))
-make_ogg("jet_thrust", 4.0, lambda t: harmonics(t, thrust) * (0.96 + 0.04 * math.sin(math.pi*t)))
-make_ogg("jet_inside", 4.0, lambda t: harmonics(t, inside) * (0.98 + 0.02 * math.sin(math.pi*t)))
-make_ogg("jet_distant", 4.0, lambda t: harmonics(t, distant) * (0.98 + 0.02 * math.sin(math.pi*t)))
+# Broad high-power roar: much denser low/mid spectrum than idle.
+thrust = harmonic_set([
+    (50, .34), (75, .24), (100, .20), (125, .16),
+    (175, .14), (225, .12), (300, .11), (400, .10),
+    (550, .09), (700, .075), (900, .065), (1150, .055),
+    (1450, .045), (1800, .035), (2200, .028)
+], 7472)
+
+# Interior is intentionally low-passed: mostly rumble and structure-borne components.
+inside = harmonic_set([
+    (38, .55), (55, .34), (76, .26), (110, .18),
+    (145, .13), (190, .09), (260, .055), (360, .03)
+], 7473)
+
+# Distant fly-by is even more low-frequency dominant.
+distant = harmonic_set([
+    (28, .58), (42, .36), (56, .25), (84, .16),
+    (112, .10), (168, .06), (240, .025)
+], 7474)
+
+# Exterior-only compressor/fan tone. Kept subtle in the mixer.
+whine = harmonic_set([
+    (1450, .20), (1725, .17), (2050, .14), (2475, .10),
+    (2925, .075), (3450, .05)
+], 7475)
+
+make_ogg("jet_idle", 4.0, lambda t: harmonics(t, idle) * (0.985 + 0.015 * math.sin(math.pi*t)))
+make_ogg("jet_thrust", 4.0, lambda t: harmonics(t, thrust) * (0.94 + 0.06 * math.sin(math.tau*1.5*t)))
+make_ogg("jet_inside", 4.0, lambda t: harmonics(t, inside) * (0.97 + 0.03 * math.sin(math.tau*0.75*t)))
+make_ogg("jet_distant", 4.0, lambda t: harmonics(t, distant) * (0.98 + 0.02 * math.sin(math.tau*0.5*t)))
+make_ogg("jet_whine", 4.0, lambda t: harmonics(t, whine) * (0.96 + 0.04 * math.sin(math.tau*2.0*t)))
 
 def startup(t):
-    ramp = min(1.0, t / 2.25)
-    fade = min(1.0, max(0.0, (3.2 - t) / 0.22))
-    phase = math.tau * (100*t + 135*t*t)
-    rumble = .22 * math.sin(math.tau*45*t) + .07 * math.sin(math.tau*90*t)
-    turbine = .27 * math.sin(phase) + .11 * math.sin(2*phase + .4)
-    return ramp * fade * (rumble + turbine)
+    ramp = min(1.0, t / 2.4)
+    fade = min(1.0, max(0.0, (3.4 - t) / 0.25))
+    low = .26 * math.sin(math.tau*42*t) + .10 * math.sin(math.tau*84*t)
+    # Rising spool tone, deliberately less piercing than v0.5.
+    phase = math.tau * (85*t + 85*t*t)
+    spool = .16 * math.sin(phase) + .06 * math.sin(2*phase + .4)
+    return ramp * fade * (low + spool)
 
 def shutdown(t):
-    env = math.exp(-1.25*t)
-    phase = math.tau * (520*t - 70*t*t)
-    return env * (.25*math.sin(phase) + .13*math.sin(.5*phase) + .19*math.sin(math.tau*50*t))
+    env = math.exp(-1.20*t)
+    phase = math.tau * (360*t - 42*t*t)
+    return env * (.20*math.sin(phase) + .10*math.sin(.5*phase) + .24*math.sin(math.tau*42*t))
 
-make_ogg("jet_start", 3.2, startup)
-make_ogg("jet_stop", 2.8, shutdown)
+make_ogg("jet_start", 3.4, startup)
+make_ogg("jet_stop", 3.0, shutdown)
 make_ogg("jet_silent", .25, lambda t: 0.0)
 
 patch = {
