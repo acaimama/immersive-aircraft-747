@@ -1,0 +1,247 @@
+from pathlib import Path
+import base64, json, math, random, subprocess, uuid, wave
+
+ROOT = Path(__file__).resolve().parents[1]
+ASSETS = ROOT / "src/main/resources/assets/ia747"
+OBJECTS = ASSETS / "objects"
+SOUNDS = ASSETS / "sounds"
+TEXTURES = ASSETS / "textures/entity"
+for p in (OBJECTS, SOUNDS, TEXTURES):
+    p.mkdir(parents=True, exist_ok=True)
+
+SR = 22050
+TEXTURE_B64 = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAA4ElEQVR4nO3WIQoCURSF4XkyyZW4AME9WCcLgmAVm2BQsE2zGDSJSzBMMghjNBmMNkURq02tpjOgyAXv/9Xzhne58A4TjufrMxJOl5uKo6SfyTzaT2XcbLVlvsi2Mk/rD5k3RkuZl2TqAAuwHsAaC7AewBoLsB7AWryrVeWBblqR+WFQlvnqPi8cIs83hWd+JTa7+c2w1wmffpusv7vb/RNgAdYDWGMB1gNYYwHWAwAwFcaTmf7ZB/DP6ADANzoA8I0OAHyjAwDf6ADANzoA8I0OAHyjAwDf6ADANzoA8O0FMPswSkOB8wsAAAAASUVORK5CYII="
+(TEXTURES / "boeing_747_400_texture.png").write_bytes(base64.b64decode(TEXTURE_B64))
+
+def clamp(v):
+    return max(-1.0, min(1.0, v))
+
+def make_ogg(name, duration, fn):
+    wav = SOUNDS / (name + ".wav")
+    ogg = SOUNDS / (name + ".ogg")
+    n = int(SR * duration)
+    values = [fn(i / SR) for i in range(n)]
+    peak = max(0.001, max(abs(v) for v in values))
+    gain = 0.90 / peak
+    pcm = bytearray()
+    for value in values:
+        q = int(clamp(value * gain) * 32767)
+        pcm += q.to_bytes(2, "little", signed=True)
+    with wave.open(str(wav), "wb") as f:
+        f.setnchannels(1)
+        f.setsampwidth(2)
+        f.setframerate(SR)
+        f.writeframes(bytes(pcm))
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav),
+         "-c:a", "libvorbis", "-q:a", "3", str(ogg)],
+        check=True
+    )
+    wav.unlink()
+
+def harmonic_set(values, seed):
+    r = random.Random(seed)
+    return [(freq, amp, r.random() * math.tau) for freq, amp in values]
+
+def harmonics(t, parts):
+    return sum(amp * math.sin(math.tau * freq * t + phase) for freq, amp, phase in parts)
+
+idle = harmonic_set([
+    (50, .36), (100, .18), (150, .09), (350, .13),
+    (700, .09), (900, .055), (1150, .035), (1450, .022)
+], 7471)
+thrust = harmonic_set([
+    (62.5, .36), (125, .18), (250, .10), (500, .15),
+    (750, .10), (1000, .08), (1500, .06), (2000, .045),
+    (3000, .032), (4000, .018)
+], 7472)
+inside = harmonic_set([(50,.50),(100,.24),(150,.10),(250,.06),(400,.035)], 7473)
+distant = harmonic_set([(37.5,.56),(75,.28),(112.5,.12),(187.5,.06),(300,.025)], 7474)
+
+make_ogg("jet_idle", 4.0, lambda t: harmonics(t, idle) * (0.97 + 0.03 * math.sin(math.pi*t)))
+make_ogg("jet_thrust", 4.0, lambda t: harmonics(t, thrust) * (0.96 + 0.04 * math.sin(math.pi*t)))
+make_ogg("jet_inside", 4.0, lambda t: harmonics(t, inside) * (0.98 + 0.02 * math.sin(math.pi*t)))
+make_ogg("jet_distant", 4.0, lambda t: harmonics(t, distant) * (0.98 + 0.02 * math.sin(math.pi*t)))
+
+def startup(t):
+    ramp = min(1.0, t / 2.25)
+    fade = min(1.0, max(0.0, (3.2 - t) / 0.22))
+    phase = math.tau * (100*t + 135*t*t)
+    rumble = .22 * math.sin(math.tau*45*t) + .07 * math.sin(math.tau*90*t)
+    turbine = .27 * math.sin(phase) + .11 * math.sin(2*phase + .4)
+    return ramp * fade * (rumble + turbine)
+
+def shutdown(t):
+    env = math.exp(-1.25*t)
+    phase = math.tau * (520*t - 70*t*t)
+    return env * (.25*math.sin(phase) + .13*math.sin(.5*phase) + .19*math.sin(math.tau*50*t))
+
+make_ogg("jet_start", 3.2, startup)
+make_ogg("jet_stop", 2.8, shutdown)
+make_ogg("jet_silent", .25, lambda t: 0.0)
+
+patch = {
+    "body":[0,0,8,8], "body2":[8,0,16,8], "blue":[16,0,24,8],
+    "dark":[24,0,32,8], "metal":[32,0,40,8], "seat":[40,0,48,8],
+    "tan":[48,0,56,8], "black":[56,0,64,8],
+    "red":[0,8,8,16], "green":[8,8,16,16],
+    "yellow":[16,8,24,16], "silver":[24,8,32,16]
+}
+def uid():
+    return str(uuid.uuid4())
+
+def face_map(material):
+    uv = patch[material]
+    return {side:{"uv":uv,"texture":0} for side in ("north","east","south","west","up","down")}
+
+elements = []
+outliner = []
+
+def cube(name, fr, to, material="body", rotation=None, origin=None):
+    ident = uid()
+    e = {
+        "name":name, "box_uv":False, "rescale":False, "locked":False,
+        "render_order":"default", "allow_mirror_modeling":True,
+        "from":list(fr), "to":list(to), "autouv":0, "color":0,
+        "origin":list(origin or [0,0,0]), "faces":face_map(material),
+        "type":"cube", "uuid":ident
+    }
+    if rotation is not None:
+        e["rotation"] = list(rotation)
+    elements.append(e)
+    outliner.append(ident)
+
+# Main deck shell. The 11-unit horizontal gap is a true window opening.
+cube("fuselage_floor",(-26,16,-125),(26,20,125),"body2")
+cube("fuselage_belly",(-23,12,-118),(23,16,118),"body")
+cube("fuselage_roof",(-24,57,-125),(24,61,125),"body")
+for side in (-1, 1):
+    xa, xb = ((-28,-25) if side < 0 else (25,28))
+    cube("side_lower",(xa,20,-125),(xb,38,125),"body")
+    cube("side_upper",(xa,49,-125),(xb,57,125),"body")
+    outer_a, outer_b = ((-29,-28.1) if side < 0 else (28.1,29))
+    cube("cheatline",(outer_a,35,-120),(outer_b,39,120),"blue")
+    for z in range(-112, 113, 15):
+        cube("window_pillar",(xa,38,z-2),(xb,49,z+2),"body2")
+
+# Rounded-looking segmented nose / cockpit surround.
+cube("nose_1",(-25,18,125),(25,58,141),"body")
+cube("nose_2",(-21,20,141),(21,55,154),"body2")
+cube("nose_3",(-15,23,154),(15,51,164),"body")
+cube("nose_tip",(-8,28,164),(8,46,170),"body2")
+cube("cockpit_brow",(-18,50,143),(18,57,159),"body2")
+cube("radome_band",(-14,30,160),(14,43,165),"body")
+
+# Tail cone + APU.
+cube("tail_1",(-23,18,-143),(23,57,-125),"body")
+cube("tail_2",(-17,21,-156),(17,54,-143),"body2")
+cube("tail_3",(-10,25,-166),(10,49,-156),"body")
+cube("apu_tail",(-5,31,-172),(5,43,-166),"dark")
+
+# Signature 747 upper-deck hump, also with real window gaps.
+cube("upper_floor",(-21,58,38),(21,62,125),"body2")
+cube("upper_roof",(-18,77,45),(18,81,119),"body")
+for side in (-1,1):
+    xa, xb = ((-23,-20) if side < 0 else (20,23))
+    cube("upper_lower",(xa,62,42),(xb,67,123),"body")
+    cube("upper_upper",(xa,73,49),(xb,78,116),"body")
+    for z in range(52,116,14):
+        cube("upper_pillar",(xa,67,z-2),(xb,73,z+2),"body2")
+cube("hump_front",(-19,62,116),(19,78,130),"body")
+cube("hump_tip",(-14,63,130),(14,74,139),"body2")
+
+# Swept wings / leading edges / winglets.
+cube("wing_root_l",(-82,28,-28),(-18,33,45),"body2",[0,-12,0],[-20,30,0])
+cube("wing_outer_l",(-157,27,-50),(-70,31,20),"body2",[0,-20,0],[-78,29,-15])
+cube("wing_root_r",(18,28,-28),(82,33,45),"body2",[0,12,0],[20,30,0])
+cube("wing_outer_r",(70,27,-50),(157,31,20),"body2",[0,20,0],[78,29,-15])
+cube("leading_l",(-148,31,-35),(-24,34,-28),"silver",[0,-18,0],[-28,32,-30])
+cube("leading_r",(24,31,-35),(148,34,-28),"silver",[0,18,0],[28,32,-30])
+cube("winglet_l",(-160,30,-51),(-154,52,-43),"body",[0,0,10],[-157,30,-47])
+cube("winglet_l_blue",(-160,45,-51),(-154,53,-43),"blue",[0,0,10],[-157,30,-47])
+cube("winglet_r",(154,30,-51),(160,52,-43),"body",[0,0,-10],[157,30,-47])
+cube("winglet_r_blue",(154,45,-51),(160,53,-43),"blue",[0,0,-10],[157,30,-47])
+
+# Tailplane and vertical stabilizer.
+cube("hstab_l",(-72,47,-160),(-8,51,-124),"body2",[0,-18,0],[-12,49,-145])
+cube("hstab_r",(8,47,-160),(72,51,-124),"body2",[0,18,0],[12,49,-145])
+cube("vstab",(-5,48,-166),(5,112,-135),"body",[-10,0,0],[0,50,-150])
+cube("vstab_blue",(-5,86,-165),(5,113,-143),"blue",[-10,0,0],[0,50,-150])
+
+# Four high-bypass turbofans.
+def engine(prefix, x, y, z):
+    cube(prefix+"_pylon",(x-5,y+15,z-8),(x+5,y+34,z+11),"metal",[-10,0,0],[x,y+20,z])
+    cube(prefix+"_nacelle_a",(x-11,y-11,z-18),(x+11,y+11,z+18),"body")
+    cube(prefix+"_nacelle_b",(x-10,y-10,z-18),(x+10,y+10,z+18),"body2",[0,0,45],[x,y,z])
+    cube(prefix+"_intake",(x-10,y-10,z+16),(x+10,y+10,z+20),"dark")
+    cube(prefix+"_core",(x-4,y-4,z+19),(x+4,y+4,z+21),"metal")
+    cube(prefix+"_exhaust",(x-7,y-7,z-21),(x+7,y+7,z-17),"dark")
+
+engine("eng1",-100,12,-25)
+engine("eng2",-55,13,-10)
+engine("eng3",55,13,-10)
+engine("eng4",100,12,-25)
+
+# Passenger doors, upper-deck doors, cargo doors and handles.
+for side in (-1,1):
+    xa, xb = ((-29.6,-28.2) if side < 0 else (28.2,29.6))
+    for i,z in enumerate((100,42,-38,-98),1):
+        cube("door_"+("L" if side<0 else "R")+str(i),(xa,23,z-6),(xb,52,z+6),"body2")
+        hx1,hx2 = ((-30.1,-29.6) if side<0 else (29.6,30.1))
+        cube("door_handle",(hx1,35,z+2),(hx2,38,z+5),"dark")
+    ux1,ux2 = ((-24,-22.5) if side<0 else (22.5,24))
+    cube("upper_door",(ux1,63,93),(ux2,76,103),"body2")
+
+cube("cargo_door_1",(28.2,22,15),(29.8,36,48),"body2")
+cube("cargo_door_2",(28.2,22,-83),(29.8,36,-48),"body2")
+for z in (15,48,-83,-48):
+    cube("cargo_frame",(29.8,22,z-1),(30.3,36,z+1),"dark")
+
+# Visible interior.
+cube("cabin_floor",(-23,20,-115),(23,22,118),"dark")
+cube("aisle",(-4,22,-112),(4,22.8,112),"tan")
+cube("cabin_ceiling",(-21,54,-112),(21,56,112),"body2")
+for z in (-72,-24,24,72):
+    for x in (-15,-8,8,15):
+        cube("seat_base",(x-3,22,z-3),(x+3,27,z+3),"seat")
+        cube("seat_back",(x-3,27,z-2),(x+3,39,z+1),"seat",[-6,0,0],[x,27,z])
+for x in (-8,8):
+    cube("pilot_seat",(x-4,23,132),(x+4,37,140),"seat")
+cube("cockpit_console",(-15,23,145),(15,36,154),"dark",[-10,0,0],[0,24,145])
+
+# Antennas, pitot tubes and flap-track fairings.
+for z in (25,-25,-75):
+    cube("antenna",(-2,61,z-3),(2,72,z+3),"body2",[-18,0,0],[0,61,z])
+for z in (55,-55):
+    cube("belly_antenna",(-2,8,z-3),(2,13,z+3),"dark",[18,0,0],[0,13,z])
+cube("pitot_l",(-26,38,151),(-20,40,166),"metal",[0,-8,0],[-23,39,151])
+cube("pitot_r",(20,38,151),(26,40,166),"metal",[0,8,0],[23,39,151])
+for x in (-115,-75,-35,35,75,115):
+    cube("flap_fairing",(x-3,23,-43),(x+3,29,-18),"body2")
+
+model = {
+    "meta":{"format_version":"4.10","model_format":"free","box_uv":False},
+    "name":"boeing_747_400", "model_identifier":"",
+    "visible_box":[1,1,0], "variable_placeholders":"",
+    "variable_placeholder_buttons":[], "timeline_setups":[],
+    "unhandled_root_fields":{}, "resolution":{"width":64,"height":64},
+    "elements":elements, "outliner":outliner,
+    "textures":[{
+        "path":"boeing_747_400_texture.png",
+        "name":"boeing_747_400_texture.png",
+        "folder":"","namespace":"","id":"0",
+        "width":64,"height":64,"uv_width":64,"uv_height":64,
+        "particle":False,"layers_enabled":False,"sync_to_project":"",
+        "render_mode":"default","render_sides":"auto","frame_time":1,
+        "frame_order_type":"loop","frame_order":"","frame_interpolate":False,
+        "visible":True,"internal":False,"saved":True,"uuid":uid(),
+        "relative_path":"boeing_747_400_texture.png"
+    }]
+}
+(OBJECTS / "boeing_747_400.bbmodel").write_text(
+    json.dumps(model, separators=(",",":")), encoding="utf-8"
+)
+
+print("Generated original 747 BBModel elements:", len(elements))
+print("Generated original jet sounds:", len(list(SOUNDS.glob("*.ogg"))))
+print("Generated external texture:", TEXTURES / "boeing_747_400_texture.png")

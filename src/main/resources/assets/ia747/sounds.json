@@ -1,0 +1,23 @@
+{
+  "jet_start": {
+    "sounds": [{"name":"ia747:jet_start","attenuation_distance":128}]
+  },
+  "jet_stop": {
+    "sounds": [{"name":"ia747:jet_stop","attenuation_distance":128}]
+  },
+  "jet_idle": {
+    "sounds": [{"name":"ia747:jet_idle","stream":true,"attenuation_distance":160}]
+  },
+  "jet_thrust": {
+    "sounds": [{"name":"ia747:jet_thrust","stream":true,"attenuation_distance":220}]
+  },
+  "jet_inside": {
+    "sounds": [{"name":"ia747:jet_inside","stream":true,"attenuation_distance":32}]
+  },
+  "jet_distant": {
+    "sounds": [{"name":"ia747:jet_distant","stream":true,"attenuation_distance":512}]
+  },
+  "jet_silent": {
+    "sounds": [{"name":"ia747:jet_silent","attenuation_distance":8}]
+  }
+}

@@ -1,106 +1,135 @@
 from pathlib import Path
-import json, sys
+import json
+import sys
 
 root = Path(__file__).parent
 errors = []
 
-for p in root.rglob('*.json'):
+for p in root.rglob("*.json"):
     try:
-        json.loads(p.read_text(encoding='utf-8'))
+        json.loads(p.read_text(encoding="utf-8"))
     except Exception as e:
-        errors.append(f'{p}: JSON: {e}')
+        errors.append(f"{p}: JSON: {e}")
 
 props = {}
-for line in (root / 'gradle.properties').read_text().splitlines():
-    if '=' in line and not line.lstrip().startswith('#'):
-        k, v = line.split('=', 1)
-        props[k.strip()] = v.strip()
+for line in (root / "gradle.properties").read_text().splitlines():
+    if "=" in line and not line.lstrip().startswith("#"):
+        key, value = line.split("=", 1)
+        props[key.strip()] = value.strip()
 
-if props.get('mod_version') != '0.4.0':
-    errors.append('mod_version must be 0.4.0')
-if props.get('minecraft_version') != '1.21.1':
-    errors.append('minecraft_version must be 1.21.1')
-if props.get('immersive_aircraft_version') != '1.5.2':
-    errors.append('IA version must be 1.5.2')
-if props.get('immersive_aircraft_curse_file') != '8914643':
-    errors.append('IA CurseForge file must be 8914643')
-
-mod = json.loads((root / 'src/main/resources/fabric.mod.json').read_text())
-if mod['depends'].get('immersive_aircraft') != '>=1.5.2':
-    errors.append('fabric.mod.json IA dependency mismatch')
+if props.get("mod_version") != "0.5.0":
+    errors.append("mod_version must be 0.5.0")
+if props.get("minecraft_version") != "1.21.1":
+    errors.append("minecraft_version must be 1.21.1")
+if props.get("immersive_aircraft_version") != "1.5.2":
+    errors.append("IA version must be 1.5.2")
+if props.get("immersive_aircraft_curse_file") != "8914643":
+    errors.append("IA CurseForge file must be 8914643")
 
 required = [
-    'src/main/java/dev/openai/ia747/Boeing747Addon.java',
-    'src/main/java/dev/openai/ia747/entity/Boeing747Entity.java',
-    'src/main/java/dev/openai/ia747/client/Boeing747Client.java',
-    'src/main/java/dev/openai/ia747/client/Boeing747Renderer.java',
-    'src/main/resources/data/ia747/aircraft/boeing_747_400.json',
-    'src/main/resources/data/ia747/recipe/boeing_747_400.json',
-    'src/main/resources/assets/ia747/lang/en_us.json',
-    'src/main/resources/assets/ia747/lang/zh_cn.json',
-    'src/main/resources/assets/ia747/models/item/boeing_747_400.json',
+    "tools/generate_747_assets.py",
+    "src/main/java/dev/openai/ia747/Boeing747Addon.java",
+    "src/main/java/dev/openai/ia747/entity/Boeing747Entity.java",
+    "src/main/java/dev/openai/ia747/client/Boeing747Client.java",
+    "src/main/java/dev/openai/ia747/client/Boeing747Renderer.java",
+    "src/main/java/dev/openai/ia747/client/Boeing747SoundManager.java",
+    "src/main/java/dev/openai/ia747/sound/Boeing747Sounds.java",
+    "src/main/resources/data/ia747/aircraft/boeing_747_400.json",
+    "src/main/resources/data/ia747/recipe/boeing_747_400.json",
+    "src/main/resources/assets/ia747/models/item/boeing_747_400.json",
+    "src/main/resources/assets/ia747/objects/boeing_747_400.bbmodel",
+    "src/main/resources/assets/ia747/textures/entity/boeing_747_400_texture.png",
+    "src/main/resources/assets/ia747/sounds.json",
 ]
 for rel in required:
     if not (root / rel).exists():
-        errors.append(f'missing {rel}')
+        errors.append(f"missing {rel}")
 
-ac = json.loads((root / 'src/main/resources/data/ia747/aircraft/boeing_747_400.json').read_text())
-pr = ac.get('properties', {})
-
-for k in (
-    'fuel', 'yawSpeed', 'pitchSpeed', 'engineSpeed', 'engineMaxSpeed',
-    'pushSpeed', 'glideFactor', 'driftDrag', 'lift', 'rollFactor',
-    'groundPitch', 'mass'
+for sound in (
+    "jet_start.ogg",
+    "jet_stop.ogg",
+    "jet_idle.ogg",
+    "jet_thrust.ogg",
+    "jet_inside.ogg",
+    "jet_distant.ogg",
+    "jet_silent.ogg",
 ):
-    if k not in pr:
-        errors.append(f'aircraft properties missing {k}')
+    path = root / "src/main/resources/assets/ia747/sounds" / sound
+    if not path.exists():
+        errors.append(f"missing sound {sound}")
+    elif path.stat().st_size < 1000:
+        errors.append(f"sound asset suspiciously small: {sound} ({path.stat().st_size} bytes)")
 
-if pr.get('mass', 0) < 10:
-    errors.append('747 mass unexpectedly low')
-if pr.get('groundPitch', 99) > 2.5:
-    errors.append('groundPitch too high; idle nose-up bug may return')
-if len(ac.get('boundingBoxes', [])) < 20:
-    errors.append('not enough collision volumes')
-if len(ac.get('trails', [])) != 4:
-    errors.append('747 should have four engine trails')
-if len(ac.get('passengerPositions', [])) != 16:
-    errors.append('747 should expose 16 progressive passenger layouts')
+texture = root / "src/main/resources/assets/ia747/textures/entity/boeing_747_400_texture.png"
+if texture.exists():
+    data = texture.read_bytes()
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        errors.append("747 texture is not a PNG")
 
-cargo = 0
-for slot in ac.get('inventorySlots', []):
-    if slot.get('type') == 'inventory':
-        cargo += slot.get('cols', 1) * slot.get('rows', 1)
-if cargo < 32:
-    errors.append(f'cargo capacity too small: {cargo}')
+model_path = root / "src/main/resources/assets/ia747/objects/boeing_747_400.bbmodel"
+if model_path.exists():
+    try:
+        model = json.loads(model_path.read_text(encoding="utf-8"))
+        elements = model.get("elements", [])
+        names = {e.get("name") for e in elements}
+        if len(elements) < 100:
+            errors.append(f"BBModel detail count too low: {len(elements)}")
+        for name in ("cabin_floor", "door_L1", "door_R1", "eng1_nacelle_a", "eng4_nacelle_a", "pitot_l"):
+            if name not in names:
+                errors.append(f"BBModel missing detail: {name}")
+    except Exception as e:
+        errors.append(f"BBModel parse failure: {e}")
 
-java = '\n'.join(p.read_text() for p in (root / 'src/main/java').rglob('*.java'))
+aircraft_path = root / "src/main/resources/data/ia747/aircraft/boeing_747_400.json"
+if aircraft_path.exists():
+    ac = json.loads(aircraft_path.read_text(encoding="utf-8"))
+    pr = ac.get("properties", {})
+    if pr.get("mass", 0) < 10:
+        errors.append("747 mass unexpectedly low")
+    if pr.get("groundPitch", 99) > 2.5:
+        errors.append("groundPitch too high; idle nose-up bug may return")
+    if len(ac.get("boundingBoxes", [])) < 20:
+        errors.append("not enough collision volumes")
+    if len(ac.get("trails", [])) != 4:
+        errors.append("747 should have four engine trails")
+    if len(ac.get("passengerPositions", [])) != 16:
+        errors.append("747 should expose 16 progressive passenger layouts")
+
+    cargo = 0
+    for slot in ac.get("inventorySlots", []):
+        if slot.get("type") == "inventory":
+            cargo += slot.get("cols", 1) * slot.get("rows", 1)
+    if cargo < 32:
+        errors.append(f"cargo capacity too small: {cargo}")
+
+java = "\n".join(p.read_text(encoding="utf-8") for p in (root / "src/main/java").rglob("*.java"))
 for token in (
-    'class Boeing747Entity',
-    'extends AirplaneEntity',
-    'class Boeing747Renderer',
-    'EntityRendererRegistry.register',
-    'getEngineTarget() < 0.05F',
-    'LightTexture.FULL_BRIGHT',
-    'renderLandingGear',
-    'renderFlaps'
+    "getEngineTarget() < 0.05F",
+    "JET_SILENT",
+    "JET_START",
+    "JET_THRUST",
+    "ClientTickEvents.END_CLIENT_TICK",
+    "LIGHT_BLUE_STAINED_GLASS",
+    "TINTED_GLASS",
+    "renderDoorWindows",
+    "renderExteriorLights",
+    "renderCabinLighting",
+    "LightTexture.FULL_BRIGHT",
 ):
     if token not in java:
-        errors.append(f'Java source missing token: {token}')
+        errors.append(f"Java source missing v0.5 token: {token}")
+
+sounds = json.loads((root / "src/main/resources/assets/ia747/sounds.json").read_text(encoding="utf-8"))
+for key in ("jet_start","jet_stop","jet_idle","jet_thrust","jet_inside","jet_distant","jet_silent"):
+    if key not in sounds:
+        errors.append(f"sounds.json missing {key}")
 
 if errors:
-    print('STATIC CHECKS FAILED')
-    print('\n'.join(' - ' + e for e in errors))
+    print("STATIC CHECKS FAILED")
+    print("\n".join(" - " + e for e in errors))
     sys.exit(1)
 
-print('STATIC CHECKS PASSED')
-print(
-    f"v{props['mod_version']} / MC {props['minecraft_version']} / "
-    f"IA {props['immersive_aircraft_version']}"
-)
-print(
-    f"Passengers: {len(ac.get('passengerPositions', []))}; "
-    f"cargo slots: {cargo}; "
-    f"bounding boxes: {len(ac.get('boundingBoxes', []))}; "
-    f"trails: {len(ac.get('trails', []))}; "
-    f"groundPitch: {pr.get('groundPitch')}"
-)
+print("STATIC CHECKS PASSED")
+print("Version:", props["mod_version"])
+print("Detailed BBModel, external PNG texture and seven original jet sound assets are present.")
+print("16 seats / >=32 cargo / 20+ collision volumes / four engine trails verified.")

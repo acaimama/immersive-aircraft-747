@@ -18,8 +18,9 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 public final class Boeing747Renderer extends AircraftEntityRenderer<Boeing747Entity> {
-    private static final ResourceLocation MODEL_ID = Boeing747Addon.id("boeing_747_400_procedural");
-    private final ModelPartRenderHandler<Boeing747Entity> emptyModel = new ModelPartRenderHandler<>();
+    private static final ResourceLocation MODEL_ID = Boeing747Addon.id("boeing_747_400");
+
+    private final ModelPartRenderHandler<Boeing747Entity> model = new ModelPartRenderHandler<>();
     private final BlockRenderDispatcher blocks = Minecraft.getInstance().getBlockRenderer();
 
     public Boeing747Renderer(EntityRendererProvider.Context context) {
@@ -34,198 +35,305 @@ public final class Boeing747Renderer extends AircraftEntityRenderer<Boeing747Ent
 
     @Override
     protected ModelPartRenderHandler<Boeing747Entity> getModel(AircraftEntity entity) {
-        return emptyModel;
+        return model;
     }
 
     @Override
     protected double getCullingBoundingBoxInflation() {
-        return 13.0;
+        return 14.0;
     }
 
     @Override
-    public void renderLocal(Boeing747Entity entity, float yaw, float tickDelta, PoseStack poseStack,
-                            PoseStack.Pose peek, MultiBufferSource buffers, int packedLight) {
+    public void renderLocal(
+            Boeing747Entity entity,
+            float yaw,
+            float tickDelta,
+            PoseStack poseStack,
+            PoseStack.Pose peek,
+            MultiBufferSource buffers,
+            int packedLight
+    ) {
+        // IA renders the new detailed BBModel first.
         super.renderLocal(entity, yaw, tickDelta, poseStack, peek, buffers, packedLight);
+
+        // Transparent / emissive / animated details are layered on top.
         poseStack.pushPose();
-        poseStack.translate(0.0, 0.20, 0.0);
-        renderAirframe(entity, tickDelta, poseStack, buffers, packedLight);
+        renderTransparentWindows(poseStack, buffers, packedLight);
+        renderCabinLighting(entity, poseStack, buffers);
+        renderCockpitGlass(poseStack, buffers, packedLight);
+        renderDoorWindows(poseStack, buffers, packedLight);
+        renderEngineFans(entity, tickDelta, poseStack, buffers, packedLight);
+        renderFlaps(entity, poseStack, buffers, packedLight);
+        renderLandingGear(entity, poseStack, buffers, packedLight);
+        renderExteriorLights(entity, poseStack, buffers);
         poseStack.popPose();
     }
 
-    private void renderAirframe(Boeing747Entity entity, float tickDelta, PoseStack p, MultiBufferSource b, int light) {
-        BlockState white = Blocks.SMOOTH_QUARTZ.defaultBlockState();
-        BlockState gray = Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState();
-        BlockState dark = Blocks.POLISHED_BLACKSTONE.defaultBlockState();
-        BlockState glass = Blocks.BLACK_STAINED_GLASS.defaultBlockState();
-        BlockState blue = Blocks.BLUE_CONCRETE.defaultBlockState();
-        BlockState iron = Blocks.IRON_BLOCK.defaultBlockState();
-        BlockState tire = Blocks.BLACK_CONCRETE.defaultBlockState();
+    private void renderTransparentWindows(PoseStack p, MultiBufferSource b, int light) {
+        BlockState glass = Blocks.LIGHT_BLUE_STAINED_GLASS.defaultBlockState();
 
-        // Long wide-body fuselage, nose and tail cone.
-        cuboid(p,b,light,white,0,2.35F,0.2F,3.35F,2.65F,13.4F,0,0,0);
-        cuboid(p,b,light,white,0,2.35F,7.55F,2.95F,2.45F,2.25F,0,0,0);
-        cuboid(p,b,light,white,0,2.35F,9.05F,2.35F,2.05F,1.15F,0,0,0);
-        cuboid(p,b,light,white,0,2.55F,-8.7F,1.9F,2.0F,3.0F,0,0,0);
-
-        // 747 upper-deck hump.
-        cuboid(p,b,light,white,0,3.95F,5.10F,2.78F,1.55F,5.75F,0,0,0);
-        cuboid(p,b,light,white,0,4.15F,7.18F,2.48F,1.25F,1.65F,0,0,0);
-
-        // Cockpit glazing.
-        cuboid(p,b,light,glass,0.72F,4.12F,7.62F,0.92F,0.46F,0.11F,0,-17,0);
-        cuboid(p,b,light,glass,-0.72F,4.12F,7.62F,0.92F,0.46F,0.11F,0,17,0);
-
-        // Main-deck windows and upper-deck windows.
-        for (float z = 5.55F; z >= -6.45F; z -= 1.18F) {
-            cuboid(p,b,light,glass,1.69F,2.92F,z,0.08F,0.30F,0.48F,0,0,0);
-            cuboid(p,b,light,glass,-1.69F,2.92F,z,0.08F,0.30F,0.48F,0,0,0);
-        }
-        for (float z = 5.65F; z >= 2.15F; z -= 1.10F) {
-            cuboid(p,b,light,glass,1.38F,4.17F,z,0.07F,0.25F,0.42F,0,0,0);
-            cuboid(p,b,light,glass,-1.38F,4.17F,z,0.07F,0.25F,0.42F,0,0,0);
+        // Main deck: real transparent panes over the geometric openings in the BBModel shell.
+        for (float z = -6.55F; z <= 7.05F; z += 0.9375F) {
+            cuboid(p,b,light,glass,-1.765F,2.72F,z,0.075F,0.52F,0.58F,0,0,0);
+            cuboid(p,b,light,glass, 1.765F,2.72F,z,0.075F,0.52F,0.58F,0,0,0);
         }
 
-        // Blue cheatline.
-        cuboid(p,b,light,blue,1.70F,2.64F,0.15F,0.09F,0.27F,13.2F,0,0,0);
-        cuboid(p,b,light,blue,-1.70F,2.64F,0.15F,0.09F,0.27F,13.2F,0,0,0);
-
-        // Swept main wings.
-        cuboid(p,b,light,gray,3.25F,1.95F,-0.55F,5.45F,0.28F,2.75F,0,11,0);
-        cuboid(p,b,light,gray,7.10F,1.92F,-2.00F,5.20F,0.22F,1.70F,0,20,0);
-        cuboid(p,b,light,gray,-3.25F,1.95F,-0.55F,5.45F,0.28F,2.75F,0,-11,0);
-        cuboid(p,b,light,gray,-7.10F,1.92F,-2.00F,5.20F,0.22F,1.70F,0,-20,0);
-
-        // 747-400 style winglets.
-        cuboid(p,b,light,white,10.03F,2.66F,-3.55F,0.30F,1.55F,0.58F,-8,0,-8);
-        cuboid(p,b,light,blue,10.04F,3.14F,-3.56F,0.31F,0.48F,0.60F,-8,0,-8);
-        cuboid(p,b,light,white,-10.03F,2.66F,-3.55F,0.30F,1.55F,0.58F,-8,0,8);
-        cuboid(p,b,light,blue,-10.04F,3.14F,-3.56F,0.31F,0.48F,0.60F,-8,0,8);
-
-        // Tailplane and vertical tail.
-        cuboid(p,b,light,gray,2.4F,3.15F,-8.75F,4.5F,0.22F,1.45F,0,21,0);
-        cuboid(p,b,light,gray,-2.4F,3.15F,-8.75F,4.5F,0.22F,1.45F,0,-21,0);
-        cuboid(p,b,light,white,0,5.15F,-8.95F,0.38F,4.35F,2.25F,-8,0,0);
-        cuboid(p,b,light,blue,0,6.55F,-9.15F,0.40F,1.50F,1.30F,-8,0,0);
-
-        // Four engine pylons and turbofan nacelles.
-        engine(entity,tickDelta,p,b,light,-6.2F,0.70F,-1.65F,white,blue,dark,gray);
-        engine(entity,tickDelta,p,b,light,-3.45F,0.72F,-0.75F,white,blue,dark,gray);
-        engine(entity,tickDelta,p,b,light,3.45F,0.72F,-0.75F,white,blue,dark,gray);
-        engine(entity,tickDelta,p,b,light,6.2F,0.70F,-1.65F,white,blue,dark,gray);
-
-        renderFlaps(entity,p,b,light,gray);
-        renderLights(entity,p,b);
-        renderLandingGear(entity,p,b,light,iron,tire);
+        // Upper deck windows in the 747 hump.
+        for (float z = 3.45F; z <= 7.05F; z += 0.875F) {
+            cuboid(p,b,light,glass,-1.445F,4.38F,z,0.070F,0.29F,0.52F,0,0,0);
+            cuboid(p,b,light,glass, 1.445F,4.38F,z,0.070F,0.29F,0.52F,0,0,0);
+        }
     }
 
-    private void renderFlaps(Boeing747Entity entity, PoseStack p, MultiBufferSource b, int light, BlockState gray) {
-        float flap = 0.0F;
+    private void renderCockpitGlass(PoseStack p, MultiBufferSource b, int light) {
+        BlockState cockpit = Blocks.TINTED_GLASS.defaultBlockState();
+
+        // Six-piece windshield gives the nose a real cockpit rather than a black painted strip.
+        cuboid(p,b,light,cockpit,-0.84F,3.45F,9.66F,0.62F,0.38F,0.075F,0,-18,0);
+        cuboid(p,b,light,cockpit,-0.28F,3.48F,9.79F,0.48F,0.38F,0.075F,0,-7,0);
+        cuboid(p,b,light,cockpit, 0.28F,3.48F,9.79F,0.48F,0.38F,0.075F,0,7,0);
+        cuboid(p,b,light,cockpit, 0.84F,3.45F,9.66F,0.62F,0.38F,0.075F,0,18,0);
+
+        cuboid(p,b,light,cockpit,-1.28F,3.35F,9.30F,0.48F,0.34F,0.070F,0,-36,0);
+        cuboid(p,b,light,cockpit, 1.28F,3.35F,9.30F,0.48F,0.34F,0.070F,0,36,0);
+    }
+
+    private void renderDoorWindows(PoseStack p, MultiBufferSource b, int light) {
+        BlockState doorGlass = Blocks.LIGHT_BLUE_STAINED_GLASS.defaultBlockState();
+
+        // Four main-deck passenger doors per side.
+        float[] doorZ = {6.25F, 2.625F, -2.375F, -6.125F};
+        for (float z : doorZ) {
+            cuboid(p,b,light,doorGlass,-1.862F,2.72F,z,0.060F,0.34F,0.34F,0,0,0);
+            cuboid(p,b,light,doorGlass, 1.862F,2.72F,z,0.060F,0.34F,0.34F,0,0,0);
+        }
+
+        // Upper-deck forward doors.
+        cuboid(p,b,light,doorGlass,-1.47F,4.36F,6.13F,0.055F,0.27F,0.30F,0,0,0);
+        cuboid(p,b,light,doorGlass, 1.47F,4.36F,6.13F,0.055F,0.27F,0.30F,0,0,0);
+    }
+
+    private void renderCabinLighting(Boeing747Entity entity, PoseStack p, MultiBufferSource b) {
+        int full = LightTexture.FULL_BRIGHT;
+        BlockState warm = Blocks.OCHRE_FROGLIGHT.defaultBlockState();
+
+        // A continuous-looking warm cabin light line is visible through the transparent windows.
+        for (float z = -6.4F; z <= 6.5F; z += 1.55F) {
+            cuboid(p,b,full,warm,-1.10F,3.28F,z,0.18F,0.10F,0.50F,0,0,0);
+            cuboid(p,b,full,warm, 1.10F,3.28F,z,0.18F,0.10F,0.50F,0,0,0);
+        }
+
+        for (float z = 3.6F; z <= 6.7F; z += 1.35F) {
+            cuboid(p,b,full,warm,-0.82F,4.72F,z,0.15F,0.09F,0.42F,0,0,0);
+            cuboid(p,b,full,warm, 0.82F,4.72F,z,0.15F,0.09F,0.42F,0,0,0);
+        }
+
+        // Cockpit instrument glow while occupied or powered.
+        if (entity.isVehicle() || entity.getEngineTarget() > 0.01F) {
+            BlockState instrument = Blocks.CYAN_STAINED_GLASS.defaultBlockState();
+            cuboid(p,b,full,instrument,0.0F,2.32F,9.35F,1.45F,0.12F,0.28F,-15,0,0);
+        }
+    }
+
+    private void renderEngineFans(
+            Boeing747Entity entity,
+            float tickDelta,
+            PoseStack p,
+            MultiBufferSource b,
+            int light
+    ) {
+        BlockState fan = Blocks.POLISHED_DEEPSLATE.defaultBlockState();
+        BlockState spinner = Blocks.IRON_BLOCK.defaultBlockState();
+
+        float power = entity.getEnginePower();
+        float speed = (float) entity.getDeltaMovement().length();
+        float angle = (entity.tickCount + tickDelta) * (20.0F + power * 240.0F + speed * 420.0F);
+
+        fan(p,b,light,fan,spinner,-6.25F,0.75F,-0.31F,angle);
+        fan(p,b,light,fan,spinner,-3.44F,0.81F, 0.63F,angle + 13.0F);
+        fan(p,b,light,fan,spinner, 3.44F,0.81F, 0.63F,angle + 27.0F);
+        fan(p,b,light,fan,spinner, 6.25F,0.75F,-0.31F,angle + 41.0F);
+    }
+
+    private void fan(
+            PoseStack p, MultiBufferSource b, int light,
+            BlockState fan, BlockState spinner,
+            float x, float y, float z, float angle
+    ) {
+        for (int i = 0; i < 6; i++) {
+            cuboid(p,b,light,fan,x,y,z+1.26F,0.10F,0.83F,0.08F,0,0,angle + i*30.0F);
+        }
+        cuboid(p,b,light,spinner,x,y,z+1.31F,0.24F,0.24F,0.18F,0,0,0);
+    }
+
+    private void renderFlaps(Boeing747Entity entity, PoseStack p, MultiBufferSource b, int light) {
+        BlockState flap = Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState();
+
         double horizontalSpeed = Math.sqrt(
                 entity.getDeltaMovement().x * entity.getDeltaMovement().x +
                 entity.getDeltaMovement().z * entity.getDeltaMovement().z
         );
-        if (entity.onGround() && entity.getEngineTarget() > 0.10F) {
-            flap = 10.0F;
-        } else if (!entity.onGround() && entity.getDeltaMovement().y < -0.012D && horizontalSpeed < 0.85D) {
-            flap = 22.0F;
+
+        float angle = 0.0F;
+        if (entity.onGround() && entity.getEngineTarget() > 0.12F) {
+            angle = 9.0F;
+        } else if (!entity.onGround() && entity.getDeltaMovement().y < -0.010D && horizontalSpeed < 0.90D) {
+            angle = 23.0F;
         }
 
-        cuboid(p,b,light,gray,4.45F,1.78F,-2.15F,4.50F,0.18F,0.72F,flap,15,0);
-        cuboid(p,b,light,gray,7.55F,1.72F,-3.15F,3.20F,0.16F,0.62F,flap,22,0);
-        cuboid(p,b,light,gray,-4.45F,1.78F,-2.15F,4.50F,0.18F,0.72F,flap,-15,0);
-        cuboid(p,b,light,gray,-7.55F,1.72F,-3.15F,3.20F,0.16F,0.62F,flap,-22,0);
+        // Inboard and outboard flap segments.
+        cuboid(p,b,light,flap,-4.35F,1.72F,-2.10F,4.15F,0.14F,0.72F,angle,-14,0);
+        cuboid(p,b,light,flap,-7.30F,1.67F,-3.05F,3.20F,0.13F,0.62F,angle,-22,0);
+        cuboid(p,b,light,flap, 4.35F,1.72F,-2.10F,4.15F,0.14F,0.72F,angle,14,0);
+        cuboid(p,b,light,flap, 7.30F,1.67F,-3.05F,3.20F,0.13F,0.62F,angle,22,0);
+
+        // Aileron hint follows roll input visually through aircraft roll rate / airborne state.
+        float aileron = entity.onGround() ? 0.0F : Math.max(-10.0F, Math.min(10.0F, entity.getRoll(1.0F) * 0.25F));
+        cuboid(p,b,light,flap,-8.75F,1.75F,-2.05F,2.15F,0.12F,0.48F,-aileron,-24,0);
+        cuboid(p,b,light,flap, 8.75F,1.75F,-2.05F,2.15F,0.12F,0.48F, aileron,24,0);
     }
 
-    private void renderLandingGear(Boeing747Entity entity, PoseStack p, MultiBufferSource b, int light,
-                                   BlockState iron, BlockState tire) {
+    private void renderLandingGear(
+            Boeing747Entity entity,
+            PoseStack p,
+            MultiBufferSource b,
+            int light
+    ) {
         boolean gearDown = entity.onGround() || entity.getDeltaMovement().y <= -0.018D;
-        if (!gearDown) return;
+        if (!gearDown) {
+            return;
+        }
 
-        // Nose gear.
-        cuboid(p,b,light,iron,0,0.76F,6.85F,0.20F,1.48F,0.20F,0,0,0);
-        wheel(p,b,light,tire,-0.31F,0.18F,6.90F);
-        wheel(p,b,light,tire,0.31F,0.18F,6.90F);
+        BlockState strut = Blocks.IRON_BLOCK.defaultBlockState();
+        BlockState tire = Blocks.BLACK_CONCRETE.defaultBlockState();
+        BlockState hub = Blocks.POLISHED_ANDESITE.defaultBlockState();
 
-        // Four main gear bogies: two body gear + two wing gear.
-        gearBogie(p,b,light,iron,tire,-1.45F,-1.60F);
-        gearBogie(p,b,light,iron,tire,1.45F,-1.60F);
-        gearBogie(p,b,light,iron,tire,-3.35F,-1.25F);
-        gearBogie(p,b,light,iron,tire,3.35F,-1.25F);
+        // Nose gear and twin wheels.
+        cuboid(p,b,light,strut,0,0.72F,6.75F,0.18F,1.35F,0.18F,0,0,0);
+        wheel(p,b,light,tire,hub,-0.28F,0.16F,6.82F);
+        wheel(p,b,light,tire,hub, 0.28F,0.16F,6.82F);
+
+        // Four 4-wheel main bogies characteristic of the 747.
+        mainBogie(p,b,light,strut,tire,hub,-1.42F,-1.48F);
+        mainBogie(p,b,light,strut,tire,hub, 1.42F,-1.48F);
+        mainBogie(p,b,light,strut,tire,hub,-3.36F,-1.20F);
+        mainBogie(p,b,light,strut,tire,hub, 3.36F,-1.20F);
+
+        // Gear door hints.
+        BlockState door = Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState();
+        cuboid(p,b,light,door,-0.58F,0.84F,6.40F,0.08F,0.85F,0.78F,0,0,-14);
+        cuboid(p,b,light,door, 0.58F,0.84F,6.40F,0.08F,0.85F,0.78F,0,0,14);
+        cuboid(p,b,light,door,-2.25F,1.12F,-1.25F,0.08F,0.85F,1.55F,0,0,-10);
+        cuboid(p,b,light,door, 2.25F,1.12F,-1.25F,0.08F,0.85F,1.55F,0,0,10);
     }
 
-    private void gearBogie(PoseStack p, MultiBufferSource b, int light, BlockState iron, BlockState tire,
-                           float x, float z) {
-        cuboid(p,b,light,iron,x,0.82F,z,0.22F,1.38F,0.22F,0,0,0);
-        cuboid(p,b,light,iron,x,0.34F,z,0.94F,0.14F,1.18F,0,0,0);
-        wheel(p,b,light,tire,x-0.38F,0.16F,z-0.38F);
-        wheel(p,b,light,tire,x+0.38F,0.16F,z-0.38F);
-        wheel(p,b,light,tire,x-0.38F,0.16F,z+0.38F);
-        wheel(p,b,light,tire,x+0.38F,0.16F,z+0.38F);
+    private void mainBogie(
+            PoseStack p, MultiBufferSource b, int light,
+            BlockState strut, BlockState tire, BlockState hub,
+            float x, float z
+    ) {
+        cuboid(p,b,light,strut,x,0.78F,z,0.20F,1.30F,0.20F,0,0,0);
+        cuboid(p,b,light,strut,x,0.32F,z,0.92F,0.13F,1.02F,0,0,0);
+        wheel(p,b,light,tire,hub,x-0.36F,0.15F,z-0.34F);
+        wheel(p,b,light,tire,hub,x+0.36F,0.15F,z-0.34F);
+        wheel(p,b,light,tire,hub,x-0.36F,0.15F,z+0.34F);
+        wheel(p,b,light,tire,hub,x+0.36F,0.15F,z+0.34F);
     }
 
-    private void wheel(PoseStack p, MultiBufferSource b, int light, BlockState tire, float x, float y, float z) {
-        cuboid(p,b,light,tire,x,y,z,0.46F,0.46F,0.34F,0,0,0);
+    private void wheel(
+            PoseStack p, MultiBufferSource b, int light,
+            BlockState tire, BlockState hub,
+            float x, float y, float z
+    ) {
+        cuboid(p,b,light,tire,x,y,z,0.43F,0.43F,0.31F,0,0,0);
+        cuboid(p,b,light,hub,x,y,z+0.17F,0.18F,0.18F,0.035F,0,0,0);
     }
 
-    private void renderLights(Boeing747Entity entity, PoseStack p, MultiBufferSource b) {
-        if (!entity.isVehicle() && entity.getEngineTarget() <= 0.01F) return;
+    private void renderExteriorLights(Boeing747Entity entity, PoseStack p, MultiBufferSource b) {
+        int full = LightTexture.FULL_BRIGHT;
 
+        BlockState whiteCore = Blocks.SEA_LANTERN.defaultBlockState();
         BlockState red = Blocks.RED_STAINED_GLASS.defaultBlockState();
         BlockState green = Blocks.LIME_STAINED_GLASS.defaultBlockState();
         BlockState white = Blocks.WHITE_STAINED_GLASS.defaultBlockState();
-        int fullBright = LightTexture.FULL_BRIGHT;
 
-        // Navigation lights: left red, right green.
-        cuboid(p,b,fullBright,red,-10.25F,2.24F,-3.30F,0.30F,0.30F,0.30F,0,0,0);
-        cuboid(p,b,fullBright,green,10.25F,2.24F,-3.30F,0.30F,0.30F,0.30F,0,0,0);
-
-        // Tail nav light.
-        cuboid(p,b,fullBright,white,0,5.10F,-10.18F,0.24F,0.24F,0.24F,0,0,0);
-
-        // White strobes flash briefly every ~1.2 seconds.
-        boolean strobe = entity.tickCount % 24 < 3;
-        if (strobe) {
-            cuboid(p,b,fullBright,white,-10.34F,2.12F,-3.18F,0.42F,0.24F,0.42F,0,0,0);
-            cuboid(p,b,fullBright,white,10.34F,2.12F,-3.18F,0.42F,0.24F,0.42F,0,0,0);
-            cuboid(p,b,fullBright,white,0,4.00F,-9.92F,0.30F,0.30F,0.30F,0,0,0);
+        // Navigation lights stay visible whenever the aircraft is occupied/powered.
+        if (entity.isVehicle() || entity.getEngineTarget() > 0.01F) {
+            lightPair(p,b,full,whiteCore,red,-10.15F,2.46F,-2.55F,0.28F,0.48F);
+            lightPair(p,b,full,whiteCore,green,10.15F,2.46F,-2.55F,0.28F,0.48F);
+            lightPair(p,b,full,whiteCore,white,0.0F,3.15F,-10.55F,0.24F,0.40F);
         }
 
-        // Landing lights when the gear is down.
-        if (entity.onGround() || entity.getDeltaMovement().y <= -0.018D) {
-            cuboid(p,b,fullBright,white,-1.15F,1.88F,4.35F,0.35F,0.22F,0.35F,0,0,0);
-            cuboid(p,b,fullBright,white,1.15F,1.88F,4.35F,0.35F,0.22F,0.35F,0,0,0);
+        // Red anti-collision beacon: top + belly, slower pulse.
+        int beaconPhase = entity.tickCount % 22;
+        if (beaconPhase < 8 && (entity.isVehicle() || entity.getEngineTarget() > 0.01F)) {
+            lightPair(p,b,full,whiteCore,red,0.0F,5.20F,0.10F,0.30F,0.58F);
+            lightPair(p,b,full,whiteCore,red,0.0F,0.68F,-0.15F,0.27F,0.52F);
+        }
+
+        // Airliner-style double white strobe.
+        int strobePhase = entity.tickCount % 30;
+        boolean doubleFlash = strobePhase < 2 || (strobePhase >= 5 && strobePhase < 7);
+        if (doubleFlash && (entity.isVehicle() || entity.getEngineTarget() > 0.01F)) {
+            lightPair(p,b,full,whiteCore,white,-10.28F,2.35F,-2.45F,0.38F,0.70F);
+            lightPair(p,b,full,whiteCore,white, 10.28F,2.35F,-2.45F,0.38F,0.70F);
+            lightPair(p,b,full,whiteCore,white,0.0F,3.22F,-10.68F,0.32F,0.58F);
+        }
+
+        boolean landingConfig = entity.onGround() || entity.getDeltaMovement().y <= -0.018D;
+        if (landingConfig && (entity.isVehicle() || entity.getEngineTarget() > 0.01F)) {
+            // Wing-root landing lights.
+            lightPair(p,b,full,whiteCore,white,-2.55F,1.94F,2.10F,0.40F,0.72F);
+            lightPair(p,b,full,whiteCore,white, 2.55F,1.94F,2.10F,0.40F,0.72F);
+            lightPair(p,b,full,whiteCore,white,-4.80F,1.82F,0.90F,0.34F,0.62F);
+            lightPair(p,b,full,whiteCore,white, 4.80F,1.82F,0.90F,0.34F,0.62F);
+
+            // Nose / taxi light.
+            lightPair(p,b,full,whiteCore,white,0.0F,0.82F,6.80F,0.32F,0.58F);
+        }
+
+        // Logo/tail illumination at night-like visual intensity whenever powered.
+        if (entity.getEngineTarget() > 0.01F) {
+            lightPair(p,b,full,whiteCore,white,-0.44F,5.80F,-8.75F,0.23F,0.38F);
+            lightPair(p,b,full,whiteCore,white, 0.44F,5.80F,-8.75F,0.23F,0.38F);
         }
     }
 
-    private void engine(Boeing747Entity entity,float tickDelta,PoseStack p,MultiBufferSource b,int light,
-                        float x,float y,float z,BlockState white,BlockState blue,BlockState dark,BlockState fan) {
-        // Pylon.
-        cuboid(p,b,light,fan,x,y+0.92F,z-0.10F,0.42F,1.00F,1.22F,-8,0,0);
-
-        // Nacelle.
-        cuboid(p,b,light,white,x,y,z,1.38F,1.38F,2.34F,0,0,0);
-        cuboid(p,b,light,blue,x,y-0.43F,z-0.08F,1.40F,0.30F,1.80F,0,0,0);
-        cuboid(p,b,light,dark,x,y,z+1.19F,1.13F,1.13F,0.14F,0,0,0);
-        cuboid(p,b,light,dark,x,y,z-1.18F,0.76F,0.76F,0.16F,0,0,0);
-
-        // Animated fan blades.
-        float speed=(float)entity.getDeltaMovement().length();
-        float power=entity.getEnginePower();
-        float fanAngle=(entity.tickCount+tickDelta)*(24.0F+power*155.0F+speed*480.0F);
-        cuboid(p,b,light,fan,x,y,z+1.26F,0.12F,0.90F,0.08F,0,0,fanAngle);
-        cuboid(p,b,light,fan,x,y,z+1.265F,0.12F,0.90F,0.08F,0,0,fanAngle+90.0F);
+    private void lightPair(
+            PoseStack p, MultiBufferSource b, int light,
+            BlockState core, BlockState lens,
+            float x, float y, float z,
+            float coreSize, float lensSize
+    ) {
+        cuboid(p,b,light,core,x,y,z,coreSize,coreSize,coreSize,0,0,0);
+        cuboid(p,b,light,lens,x,y,z,lensSize,lensSize,lensSize,0,0,0);
     }
 
-    private void cuboid(PoseStack p,MultiBufferSource buffers,int light,BlockState state,
-                        float cx,float cy,float cz,float sx,float sy,float sz,float rotX,float rotY,float rotZ) {
+    private void cuboid(
+            PoseStack p,
+            MultiBufferSource buffers,
+            int light,
+            BlockState state,
+            float cx, float cy, float cz,
+            float sx, float sy, float sz,
+            float rotX, float rotY, float rotZ
+    ) {
         p.pushPose();
-        p.translate(cx,cy,cz);
-        if(rotY!=0)p.mulPose(Axis.YP.rotationDegrees(rotY));
-        if(rotX!=0)p.mulPose(Axis.XP.rotationDegrees(rotX));
-        if(rotZ!=0)p.mulPose(Axis.ZP.rotationDegrees(rotZ));
-        p.translate(-sx*0.5F,-sy*0.5F,-sz*0.5F);
-        p.scale(sx,sy,sz);
-        blocks.renderSingleBlock(state,p,buffers,light,OverlayTexture.NO_OVERLAY);
+        p.translate(cx, cy, cz);
+
+        if (rotY != 0) {
+            p.mulPose(Axis.YP.rotationDegrees(rotY));
+        }
+        if (rotX != 0) {
+            p.mulPose(Axis.XP.rotationDegrees(rotX));
+        }
+        if (rotZ != 0) {
+            p.mulPose(Axis.ZP.rotationDegrees(rotZ));
+        }
+
+        p.translate(-sx * 0.5F, -sy * 0.5F, -sz * 0.5F);
+        p.scale(sx, sy, sz);
+        blocks.renderSingleBlock(state, p, buffers, light, OverlayTexture.NO_OVERLAY);
         p.popPose();
     }
 }
