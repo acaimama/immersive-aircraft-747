@@ -17,6 +17,9 @@
   "jet_distant": {
     "sounds": [{"name":"ia747:jet_distant","stream":true,"attenuation_distance":512}]
   },
+  "jet_whine": {
+    "sounds": [{"name":"ia747:jet_whine","stream":true,"attenuation_distance":140}]
+  },
   "jet_silent": {
     "sounds": [{"name":"ia747:jet_silent","attenuation_distance":8}]
   }
