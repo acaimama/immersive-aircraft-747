@@ -13,6 +13,7 @@ public final class Boeing747Sounds {
     public static final SoundEvent JET_THRUST = register("jet_thrust");
     public static final SoundEvent JET_INSIDE = register("jet_inside");
     public static final SoundEvent JET_DISTANT = register("jet_distant");
+    public static final SoundEvent JET_WHINE = register("jet_whine");
     public static final SoundEvent JET_SILENT = register("jet_silent");
 
     private Boeing747Sounds() {}
