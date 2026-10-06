@@ -118,7 +118,7 @@ for token in (
     "renderCabinLighting",
     "LightTexture.FULL_BRIGHT",
     "engine-off = stationary fan",
-    "recessed inside the nacelle",
+    "Visible fan planes sit behind the intake lips",
     "localFirstPersonPilot",
     "main-deck roof",
     "Twelve metallic blades",
