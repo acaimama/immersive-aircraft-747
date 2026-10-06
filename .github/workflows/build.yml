@@ -36,5 +36,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: immersive-aircraft-747-v0.6.0-1.21.1-fabric
+          name: immersive-aircraft-747-v0.7.0-1.21.1-fabric
           path: build/libs/*.jar

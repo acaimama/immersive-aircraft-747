@@ -53,10 +53,10 @@ idle = harmonic_set([
 
 # Broad high-power roar: much denser low/mid spectrum than idle.
 thrust = harmonic_set([
-    (50, .34), (75, .24), (100, .20), (125, .16),
-    (175, .14), (225, .12), (300, .11), (400, .10),
-    (550, .09), (700, .075), (900, .065), (1150, .055),
-    (1450, .045), (1800, .035), (2200, .028)
+    (50, .38), (75, .27), (100, .22), (125, .18),
+    (175, .15), (225, .13), (300, .12), (400, .105),
+    (550, .085), (700, .065), (900, .048), (1150, .032),
+    (1400, .020), (1600, .012)
 ], 7472)
 
 # Interior is intentionally low-passed: mostly rumble and structure-borne components.
@@ -73,8 +73,8 @@ distant = harmonic_set([
 
 # Exterior-only compressor/fan tone. Kept subtle in the mixer.
 whine = harmonic_set([
-    (1450, .20), (1725, .17), (2050, .14), (2475, .10),
-    (2925, .075), (3450, .05)
+    (1200, .14), (1450, .11), (1700, .085),
+    (1950, .060), (2250, .040), (2550, .022)
 ], 7475)
 
 make_ogg("jet_idle", 4.0, lambda t: harmonics(t, idle) * (0.985 + 0.015 * math.sin(math.pi*t)))
@@ -142,7 +142,7 @@ for side in (-1, 1):
     cube("side_upper",(xa,49,-125),(xb,57,125),"body")
     outer_a, outer_b = ((-29,-28.1) if side < 0 else (28.1,29))
     cube("cheatline",(outer_a,35,-120),(outer_b,39,120),"blue")
-    for z in range(-112, 113, 15):
+    for z in range(-120, 121, 15):
         cube("window_pillar",(xa,38,z-2),(xb,49,z+2),"body2")
 
 # Rounded-looking segmented nose / cockpit surround.
@@ -166,7 +166,7 @@ for side in (-1,1):
     xa, xb = ((-23,-20) if side < 0 else (20,23))
     cube("upper_lower",(xa,62,42),(xb,67,123),"body")
     cube("upper_upper",(xa,73,49),(xb,78,116),"body")
-    for z in range(52,116,14):
+    for z in (48,62,76,90,104,118):
         cube("upper_pillar",(xa,67,z-2),(xb,73,z+2),"body2")
 cube("hump_front",(-19,62,116),(19,78,130),"body")
 cube("hump_tip",(-14,63,130),(14,74,139),"body2")
@@ -192,11 +192,26 @@ cube("vstab_blue",(-5,86,-165),(5,113,-143),"blue",[-10,0,0],[0,50,-150])
 # Four high-bypass turbofans.
 def engine(prefix, x, y, z):
     cube(prefix+"_pylon",(x-5,y+15,z-8),(x+5,y+34,z+11),"metal",[-10,0,0],[x,y+20,z])
-    cube(prefix+"_nacelle_a",(x-11,y-11,z-18),(x+11,y+11,z+18),"body")
-    cube(prefix+"_nacelle_b",(x-10,y-10,z-18),(x+10,y+10,z+18),"body2",[0,0,45],[x,y,z])
-    cube(prefix+"_intake",(x-10,y-10,z+16),(x+10,y+10,z+20),"dark")
-    cube(prefix+"_core",(x-4,y-4,z+19),(x+4,y+4,z+21),"metal")
-    cube(prefix+"_exhaust",(x-7,y-7,z-21),(x+7,y+7,z-17),"dark")
+
+    # Hollow nacelle shell. The center is deliberately open so the animated
+    # fan disc is visible but remains recessed behind the intake lip.
+    cube(prefix+"_nacelle_a",(x-11,y+7,z-18),(x+11,y+11,z+18),"body")
+    cube(prefix+"_nacelle_b",(x-11,y-11,z-18),(x+11,y-7,z+18),"body2")
+    cube(prefix+"_nacelle_left",(x-11,y-7,z-18),(x-7,y+7,z+18),"body")
+    cube(prefix+"_nacelle_right",(x+7,y-7,z-18),(x+11,y+7,z+18),"body2")
+
+    # Intake lip ring, also hollow.
+    cube(prefix+"_intake_top",(x-10,y+6,z+16),(x+10,y+10,z+20),"dark")
+    cube(prefix+"_intake_bottom",(x-10,y-10,z+16),(x+10,y-6,z+20),"dark")
+    cube(prefix+"_intake_left",(x-10,y-6,z+16),(x-6,y+6,z+20),"dark")
+    cube(prefix+"_intake_right",(x+6,y-6,z+16),(x+10,y+6,z+20),"dark")
+
+    # Rear exhaust ring and center-body detail.
+    cube(prefix+"_exhaust_top",(x-7,y+4,z-21),(x+7,y+7,z-17),"dark")
+    cube(prefix+"_exhaust_bottom",(x-7,y-7,z-21),(x+7,y-4,z-17),"dark")
+    cube(prefix+"_exhaust_left",(x-7,y-4,z-21),(x-4,y+4,z-17),"dark")
+    cube(prefix+"_exhaust_right",(x+4,y-4,z-21),(x+7,y+4,z-17),"dark")
+    cube(prefix+"_core",(x-3,y-3,z-20),(x+3,y+3,z-16),"metal")
 
 engine("eng1",-100,12,-25)
 engine("eng2",-55,13,-10)

@@ -58,7 +58,19 @@ public final class Boeing747Renderer extends AircraftEntityRenderer<Boeing747Ent
             MultiBufferSource buffers,
             int packedLight
     ) {
-        // IA renders the new detailed BBModel first.
+        boolean localFirstPersonPilot =
+                Minecraft.getInstance().player != null
+                        && entity.hasPassenger(Minecraft.getInstance().player)
+                        && Minecraft.getInstance().options.getCameraType() == net.minecraft.client.CameraType.FIRST_PERSON;
+
+        // In first-person the camera sits inside the cockpit. Rendering the entire exterior
+        // shell around the camera blocks the windshield, so only third-person/external views
+        // draw the aircraft body. This does not change what other players see.
+        if (localFirstPersonPilot) {
+            return;
+        }
+
+        // IA renders the detailed BBModel first.
         super.renderLocal(entity, yaw, tickDelta, poseStack, peek, buffers, packedLight);
 
         // Transparent / emissive / animated details are layered on top.
@@ -77,16 +89,20 @@ public final class Boeing747Renderer extends AircraftEntityRenderer<Boeing747Ent
     private void renderTransparentWindows(PoseStack p, MultiBufferSource b, int light) {
         BlockState glass = Blocks.LIGHT_BLUE_STAINED_GLASS.defaultBlockState();
 
-        // Main deck: real transparent panes over the geometric openings in the BBModel shell.
-        for (float z = -6.55F; z <= 7.05F; z += 0.9375F) {
-            cuboid(p,b,light,glass,-1.765F,2.72F,z,0.075F,0.52F,0.58F,0,0,0);
-            cuboid(p,b,light,glass, 1.765F,2.72F,z,0.075F,0.52F,0.58F,0,0,0);
+        // Main-deck windows match the BBModel frame grid exactly:
+        // model pillars every 15 model-units, 4 units wide => 11-unit opening.
+        for (int i = 0; i < 16; i++) {
+            float z = (-112.5F + i * 15.0F) / 16.0F;
+            cuboid(p,b,light,glass,-1.758F,2.71875F,z,0.085F,0.675F,0.675F,0,0,0);
+            cuboid(p,b,light,glass, 1.758F,2.71875F,z,0.085F,0.675F,0.675F,0,0,0);
         }
 
-        // Upper deck windows in the 747 hump.
-        for (float z = 3.45F; z <= 7.05F; z += 0.875F) {
-            cuboid(p,b,light,glass,-1.445F,4.38F,z,0.070F,0.29F,0.52F,0,0,0);
-            cuboid(p,b,light,glass, 1.445F,4.38F,z,0.070F,0.29F,0.52F,0,0,0);
+        // Upper-deck windows use the same exact shared geometry:
+        // pillars every 14 units, 4 wide => 10-unit opening.
+        for (int i = 0; i < 5; i++) {
+            float z = (55.0F + i * 14.0F) / 16.0F;
+            cuboid(p,b,light,glass,-1.445F,4.375F,z,0.080F,0.365F,0.615F,0,0,0);
+            cuboid(p,b,light,glass, 1.445F,4.375F,z,0.080F,0.365F,0.615F,0,0,0);
         }
     }
 
@@ -147,7 +163,7 @@ public final class Boeing747Renderer extends AircraftEntityRenderer<Boeing747Ent
             MultiBufferSource b,
             int light
     ) {
-        BlockState fan = Blocks.POLISHED_DEEPSLATE.defaultBlockState();
+        BlockState fan = Blocks.POLISHED_ANDESITE.defaultBlockState();
         BlockState spinner = Blocks.IRON_BLOCK.defaultBlockState();
 
         float power = entity.getEnginePower();
@@ -169,11 +185,12 @@ public final class Boeing747Renderer extends AircraftEntityRenderer<Boeing747Ent
         float previewAdvance = power > 0.012F ? (4.0F + power * 92.0F) * tickDelta : 0.0F;
         float angle = baseAngle + previewAdvance;
 
-        // z values below are the actual fan planes just behind each intake lip.
-        fan(p,b,light,fan,spinner,-6.25F,0.75F,-0.36F,angle);
-        fan(p,b,light,fan,spinner,-3.44F,0.81F, 0.57F,angle + 13.0F);
-        fan(p,b,light,fan,spinner, 3.44F,0.81F, 0.57F,angle + 27.0F);
-        fan(p,b,light,fan,spinner, 6.25F,0.75F,-0.36F,angle + 41.0F);
+        // Visible fan planes sit behind the intake lips, not outside them.
+        // Outer engine center z=-25/16, inner z=-10/16; fan is recessed by ~0.30 block.
+        fan(p,b,light,fan,spinner,-6.25F,0.75F,-0.61F,angle);
+        fan(p,b,light,fan,spinner,-3.44F,0.81F, 0.33F,angle + 13.0F);
+        fan(p,b,light,fan,spinner, 3.44F,0.81F, 0.33F,angle + 27.0F);
+        fan(p,b,light,fan,spinner, 6.25F,0.75F,-0.61F,angle + 41.0F);
     }
 
     private void fan(
@@ -181,11 +198,11 @@ public final class Boeing747Renderer extends AircraftEntityRenderer<Boeing747Ent
             BlockState fan, BlockState spinner,
             float x, float y, float z, float angle
     ) {
-        // The fan disc is recessed inside the nacelle; z is already the intake-plane position.
-        for (int i = 0; i < 8; i++) {
-            cuboid(p,b,light,fan,x,y,z,0.085F,0.78F,0.055F,0,0,angle + i*22.5F);
+        // Twelve metallic blades form a clearly visible turbofan disc inside the open nacelle.
+        for (int i = 0; i < 12; i++) {
+            cuboid(p,b,light,fan,x,y,z,0.060F,0.84F,0.060F,0,0,angle + i*15.0F);
         }
-        cuboid(p,b,light,spinner,x,y,z+0.025F,0.22F,0.22F,0.085F,0,0,0);
+        cuboid(p,b,light,spinner,x,y,z+0.035F,0.24F,0.24F,0.10F,0,0,0);
     }
 
     private void renderFlaps(Boeing747Entity entity, PoseStack p, MultiBufferSource b, int light) {
@@ -289,8 +306,9 @@ public final class Boeing747Renderer extends AircraftEntityRenderer<Boeing747Ent
         // Red anti-collision beacon: top + belly, slower pulse.
         int beaconPhase = entity.tickCount % 22;
         if (beaconPhase < 8 && (entity.isVehicle() || entity.getEngineTarget() > 0.01F)) {
-            lightPair(p,b,full,whiteCore,red,0.0F,5.20F,0.10F,0.30F,0.58F);
-            lightPair(p,b,full,whiteCore,red,0.0F,0.68F,-0.15F,0.27F,0.52F);
+            // Top beacon is attached to the main-deck roof (roof surface ~= y 3.81 here).
+            lightPair(p,b,full,whiteCore,red,0.0F,3.86F,0.10F,0.24F,0.44F);
+            lightPair(p,b,full,whiteCore,red,0.0F,0.72F,-0.15F,0.24F,0.44F);
         }
 
         // Airliner-style double white strobe.

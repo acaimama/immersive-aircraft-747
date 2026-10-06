@@ -17,8 +17,8 @@ for line in (root / "gradle.properties").read_text().splitlines():
         key, value = line.split("=", 1)
         props[key.strip()] = value.strip()
 
-if props.get("mod_version") != "0.6.0":
-    errors.append("mod_version must be 0.6.0")
+if props.get("mod_version") != "0.7.0":
+    errors.append("mod_version must be 0.7.0")
 if props.get("minecraft_version") != "1.21.1":
     errors.append("minecraft_version must be 1.21.1")
 if props.get("immersive_aircraft_version") != "1.5.2":
@@ -119,9 +119,12 @@ for token in (
     "LightTexture.FULL_BRIGHT",
     "engine-off = stationary fan",
     "recessed inside the nacelle",
+    "localFirstPersonPilot",
+    "main-deck roof",
+    "Twelve metallic blades",
 ):
     if token not in java:
-        errors.append(f"Java source missing v0.5 token: {token}")
+        errors.append(f"Java source missing v0.7 token: {token}")
 
 sounds = json.loads((root / "src/main/resources/assets/ia747/sounds.json").read_text(encoding="utf-8"))
 for key in ("jet_start","jet_stop","jet_idle","jet_thrust","jet_inside","jet_distant","jet_whine","jet_silent"):
@@ -135,5 +138,5 @@ if errors:
 
 print("STATIC CHECKS PASSED")
 print("Version:", props["mod_version"])
-print("Detailed BBModel, corrected embedded fan discs and eight distinct original jet sound assets are present.")
+print("v0.7: aligned glazing, attached beacon, clear first-person view, visible recessed fans and mellowed exterior audio verified.")
 print("16 seats / >=32 cargo / 20+ collision volumes / four engine trails verified.")

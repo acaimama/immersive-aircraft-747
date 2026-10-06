@@ -116,13 +116,13 @@ public final class Boeing747SoundManager {
             // but it is intentionally absent in the cabin mix.
             float whineVol = interiorView
                     ? 0.0F
-                    : nearScale * clamp((power - 0.30F) / 0.70F) * 0.16F;
+                    : nearScale * clamp((power - 0.38F) / 0.62F) * 0.055F;
 
             idle = updateLoop(idle, Boeing747Sounds.JET_IDLE, idleVol, 0.88F + power * 0.08F);
-            thrust = updateLoop(thrust, Boeing747Sounds.JET_THRUST, thrustVol, 0.88F + power * 0.10F);
+            thrust = updateLoop(thrust, Boeing747Sounds.JET_THRUST, thrustVol, 0.84F + power * 0.07F);
             inside = updateLoop(inside, Boeing747Sounds.JET_INSIDE, insideVol, 0.78F + power * 0.10F);
             distant = updateLoop(distant, Boeing747Sounds.JET_DISTANT, distantVol, 0.72F + power * 0.08F);
-            whine = updateLoop(whine, Boeing747Sounds.JET_WHINE, whineVol, 0.92F + power * 0.18F);
+            whine = updateLoop(whine, Boeing747Sounds.JET_WHINE, whineVol, 0.84F + power * 0.10F);
         }
 
         private JetLoop updateLoop(JetLoop loop, SoundEvent event, float volume, float pitch) {
