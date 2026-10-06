@@ -17,8 +17,8 @@ for line in (root / "gradle.properties").read_text().splitlines():
         key, value = line.split("=", 1)
         props[key.strip()] = value.strip()
 
-if props.get("mod_version") != "0.7.0":
-    errors.append("mod_version must be 0.7.0")
+if props.get("mod_version") != "0.8.0":
+    errors.append("mod_version must be 0.8.0")
 if props.get("minecraft_version") != "1.21.1":
     errors.append("minecraft_version must be 1.21.1")
 if props.get("immersive_aircraft_version") != "1.5.2":
@@ -75,9 +75,26 @@ if model_path.exists():
         names = {e.get("name") for e in elements}
         if len(elements) < 100:
             errors.append(f"BBModel detail count too low: {len(elements)}")
-        for name in ("cabin_floor", "door_L1", "door_R1", "eng1_nacelle_a", "eng4_nacelle_a", "pitot_l"):
+        for name in (
+            "fuselage_smooth",
+            "upper_deck_smooth",
+            "wing_left_smooth",
+            "wing_right_smooth",
+            "wing_root_fairing_left",
+            "wing_root_fairing_right",
+            "vertical_tail_smooth",
+            "eng1_nacelle",
+            "eng4_nacelle",
+            "cabin_floor",
+            "door_L1",
+            "door_R1",
+            "pitot_l",
+        ):
             if name not in names:
                 errors.append(f"BBModel missing detail: {name}")
+        mesh_count = sum(1 for e in elements if e.get("type") == "mesh")
+        if mesh_count < 18:
+            errors.append(f"not enough smooth mesh components: {mesh_count}")
     except Exception as e:
         errors.append(f"BBModel parse failure: {e}")
 
@@ -124,7 +141,7 @@ for token in (
     "Twelve metallic blades",
 ):
     if token not in java:
-        errors.append(f"Java source missing v0.7 token: {token}")
+        errors.append(f"Java source missing v0.8 token: {token}")
 
 sounds = json.loads((root / "src/main/resources/assets/ia747/sounds.json").read_text(encoding="utf-8"))
 for key in ("jet_start","jet_stop","jet_idle","jet_thrust","jet_inside","jet_distant","jet_whine","jet_silent"):
@@ -138,5 +155,5 @@ if errors:
 
 print("STATIC CHECKS PASSED")
 print("Version:", props["mod_version"])
-print("v0.7: aligned glazing, attached beacon, clear first-person view, visible recessed fans and mellowed exterior audio verified.")
+print("v0.8: polygon-mesh fuselage, hump, wings, wing-root fairings, tail and rounded nacelles verified.")
 print("16 seats / >=32 cargo / 20+ collision volumes / four engine trails verified.")

@@ -132,91 +132,236 @@ def cube(name, fr, to, material="body", rotation=None, origin=None):
     elements.append(e)
     outliner.append(ident)
 
-# Main deck shell. The 11-unit horizontal gap is a true window opening.
-cube("fuselage_floor",(-26,16,-125),(26,20,125),"body2")
-cube("fuselage_belly",(-23,12,-118),(23,16,118),"body")
-cube("fuselage_roof",(-24,57,-125),(24,61,125),"body")
-for side in (-1, 1):
-    xa, xb = ((-28,-25) if side < 0 else (25,28))
-    cube("side_lower",(xa,20,-125),(xb,38,125),"body")
-    cube("side_upper",(xa,49,-125),(xb,57,125),"body")
-    outer_a, outer_b = ((-29,-28.1) if side < 0 else (28.1,29))
-    cube("cheatline",(outer_a,35,-120),(outer_b,39,120),"blue")
-    for z in range(-120, 121, 15):
-        cube("window_pillar",(xa,38,z-2),(xb,49,z+2),"body2")
 
-# Rounded-looking segmented nose / cockpit surround.
-cube("nose_1",(-25,18,125),(25,58,141),"body")
-cube("nose_2",(-21,20,141),(21,55,154),"body2")
-cube("nose_3",(-15,23,154),(15,51,164),"body")
-cube("nose_tip",(-8,28,164),(8,46,170),"body2")
-cube("cockpit_brow",(-18,50,143),(18,57,159),"body2")
-cube("radome_band",(-14,30,160),(14,43,165),"body")
+def mesh(name, positions, quad_indices, material="body"):
+    ident = uid()
+    vertices = {f"v{i}": list(v) for i, v in enumerate(positions)}
+    uv = patch[material]
+    faces = {}
+    for fi, quad in enumerate(quad_indices):
+        ids = [f"v{i}" for i in quad]
+        faces[f"f{fi}"] = {
+            "uv": {
+                ids[0]: [uv[0], uv[1]],
+                ids[1]: [uv[0], uv[3]],
+                ids[2]: [uv[2], uv[3]],
+                ids[3]: [uv[2], uv[1]],
+            },
+            "vertices": ids,
+            "texture": 0
+        }
+    elements.append({
+        "name": name,
+        "color": 0,
+        "origin": [0,0,0],
+        "rotation": [0,0,0],
+        "export": True,
+        "visibility": True,
+        "locked": False,
+        "render_order": "default",
+        "allow_mirror_modeling": True,
+        "vertices": vertices,
+        "faces": faces,
+        "type": "mesh",
+        "uuid": ident
+    })
+    outliner.append(ident)
 
-# Tail cone + APU.
-cube("tail_1",(-23,18,-143),(23,57,-125),"body")
-cube("tail_2",(-17,21,-156),(17,54,-143),"body2")
-cube("tail_3",(-10,25,-166),(10,49,-156),"body")
-cube("apu_tail",(-5,31,-172),(5,43,-166),"dark")
+def loft_z(name, stations, segments=24, material="body", omit=None):
+    positions = []
+    for z, cy, rx, ry in stations:
+        for j in range(segments):
+            a = math.tau * j / segments
+            positions.append((rx * math.cos(a), cy + ry * math.sin(a), z))
+    quads = []
+    for i in range(len(stations)-1):
+        z0, cy0, rx0, ry0 = stations[i]
+        z1, cy1, rx1, ry1 = stations[i+1]
+        for j in range(segments):
+            j2 = (j + 1) % segments
+            a = math.tau * (j + 0.5) / segments
+            zmid = (z0 + z1) * 0.5
+            cymid = (cy0 + cy1) * 0.5
+            rymid = (ry0 + ry1) * 0.5
+            ymid = cymid + rymid * math.sin(a)
+            xside = abs(math.cos(a))
+            if omit and omit(zmid, ymid, xside):
+                continue
+            a0 = i*segments + j
+            a1 = i*segments + j2
+            b1 = (i+1)*segments + j2
+            b0 = (i+1)*segments + j
+            quads.append((a0,a1,b1,b0))
+    mesh(name, positions, quads, material)
 
-# Signature 747 upper-deck hump, also with real window gaps.
-cube("upper_floor",(-21,58,38),(21,62,125),"body2")
-cube("upper_roof",(-18,77,45),(18,81,119),"body")
+def wing_mesh(name, side):
+    s = -1 if side < 0 else 1
+    pts = [
+        (20*s,34,44),(20*s,34,-28),
+        (82*s,31,18),(82*s,31,-42),
+        (160*s,29,-8),(160*s,29,-53),
+        (20*s,29,44),(20*s,29,-28),
+        (82*s,28,18),(82*s,28,-42),
+        (160*s,27,-8),(160*s,27,-53),
+    ]
+    q = [
+        (0,2,3,1),(2,4,5,3),
+        (7,9,8,6),(9,11,10,8),
+        (0,6,8,2),(2,8,10,4),
+        (1,3,9,7),(3,5,11,9),(4,10,11,5)
+    ]
+    mesh(name, pts, q, "body2")
+
+def hstab_mesh(name, side):
+    s = -1 if side < 0 else 1
+    pts = [
+        (8*s,51,-132),(8*s,51,-160),(72*s,49,-142),(72*s,49,-166),
+        (8*s,47,-132),(8*s,47,-160),(72*s,47,-142),(72*s,47,-166)
+    ]
+    q=[(0,2,3,1),(5,7,6,4),(0,4,6,2),(1,3,7,5),(2,6,7,3)]
+    mesh(name, pts, q, "body2")
+
+def nacelle_mesh(prefix, x, y, z):
+    seg = 20
+    stations = [(-21,7.2),(-17,8.2),(-9,10.2),(8,11.0),(15,10.7),(20,10.0)]
+    positions = []
+    for dz,r in stations:
+        for j in range(seg):
+            a = math.tau*j/seg
+            positions.append((x+r*math.cos(a), y+r*math.sin(a), z+dz))
+    q = []
+    for i in range(len(stations)-1):
+        for j in range(seg):
+            j2=(j+1)%seg
+            q.append((i*seg+j,i*seg+j2,(i+1)*seg+j2,(i+1)*seg+j))
+    mesh(prefix+"_nacelle",positions,q,"body")
+
+    positions = []
+    outer, inner = 10.0, 7.4
+    for radius,dz in ((outer,20.0),(inner,19.2)):
+        for j in range(seg):
+            a=math.tau*j/seg
+            positions.append((x+radius*math.cos(a),y+radius*math.sin(a),z+dz))
+    q=[]
+    for j in range(seg):
+        j2=(j+1)%seg
+        q.append((j,j2,seg+j2,seg+j))
+    mesh(prefix+"_intake_lip",positions,q,"dark")
+
+    positions=[]
+    for radius,dz in ((7.4,19.2),(7.1,12.0)):
+        for j in range(seg):
+            a=math.tau*j/seg
+            positions.append((x+radius*math.cos(a),y+radius*math.sin(a),z+dz))
+    q=[]
+    for j in range(seg):
+        j2=(j+1)%seg
+        q.append((j,j2,seg+j2,seg+j))
+    mesh(prefix+"_intake_duct",positions,q,"dark")
+
+def wing_root_fairing(name, side):
+    s=-1 if side<0 else 1
+    stations=[
+        (27*s,36.5,17,18),
+        (34*s,35.5,15,15),
+        (43*s,34.0,11,11),
+        (52*s,32.5,6,7)
+    ]
+    seg=16
+    positions=[]
+    for x,cy,rz,ry in stations:
+        for j in range(seg):
+            a=math.tau*j/seg
+            positions.append((x,cy+ry*math.sin(a),-3+rz*math.cos(a)))
+    q=[]
+    for i in range(len(stations)-1):
+        for j in range(seg):
+            j2=(j+1)%seg
+            q.append((i*seg+j,i*seg+j2,(i+1)*seg+j2,(i+1)*seg+j))
+    mesh(name,positions,q,"body2")
+
+# Smooth polygon-mesh airframe.
+def main_window_opening(zmid, ymid, xside):
+    return (-120 < zmid < 120) and (38.0 < ymid < 49.0) and (xside > 0.82)
+
+fuselage_stations = [
+    (-171,36.5,3.0,4.5),
+    (-165,36.5,9.0,11.0),
+    (-156,36.5,16.0,17.0),
+    (-144,36.5,22.5,21.0),
+    (-126,36.5,27.0,24.0),
+    (-100,36.5,28.0,24.5),
+    (0,36.5,28.0,24.5),
+    (100,36.5,28.0,24.5),
+    (122,36.5,27.5,24.0),
+    (138,36.5,24.5,22.0),
+    (151,36.5,20.0,18.5),
+    (161,36.5,14.0,14.0),
+    (168,36.5,7.5,8.0),
+    (171,36.5,2.5,3.0),
+]
+loft_z("fuselage_smooth", fuselage_stations, 24, "body", main_window_opening)
+
 for side in (-1,1):
-    xa, xb = ((-23,-20) if side < 0 else (20,23))
-    cube("upper_lower",(xa,62,42),(xb,67,123),"body")
-    cube("upper_upper",(xa,73,49),(xb,78,116),"body")
+    xa, xb = ((-28.8,-27.4) if side < 0 else (27.4,28.8))
+    for z in range(-120,121,15):
+        cube("window_pillar",(xa,38,z-2),(xb,49,z+2),"body2")
+    outer_a, outer_b = ((-29.1,-28.3) if side < 0 else (28.3,29.1))
+    cube("cheatline",(outer_a,35,-120),(outer_b,39,120),"blue")
+
+def upper_window_opening(zmid, ymid, xside):
+    return (48 < zmid < 119) and (67.0 < ymid < 73.2) and (xside > 0.80)
+
+upper_stations = [
+    (34,61.0,12.0,4.0),
+    (45,67.5,21.0,9.0),
+    (60,69.5,23.0,11.5),
+    (105,69.5,23.0,11.5),
+    (119,69.0,21.0,10.5),
+    (130,67.0,16.0,7.5),
+    (139,64.0,8.0,3.5),
+]
+loft_z("upper_deck_smooth", upper_stations, 20, "body", upper_window_opening)
+
+for side in (-1,1):
+    xa, xb = ((-23.8,-22.5) if side < 0 else (22.5,23.8))
     for z in (48,62,76,90,104,118):
         cube("upper_pillar",(xa,67,z-2),(xb,73,z+2),"body2")
-cube("hump_front",(-19,62,116),(19,78,130),"body")
-cube("hump_tip",(-14,63,130),(14,74,139),"body2")
 
-# Swept wings / leading edges / winglets.
-cube("wing_root_l",(-82,28,-28),(-18,33,45),"body2",[0,-12,0],[-20,30,0])
-cube("wing_outer_l",(-157,27,-50),(-70,31,20),"body2",[0,-20,0],[-78,29,-15])
-cube("wing_root_r",(18,28,-28),(82,33,45),"body2",[0,12,0],[20,30,0])
-cube("wing_outer_r",(70,27,-50),(157,31,20),"body2",[0,20,0],[78,29,-15])
-cube("leading_l",(-148,31,-35),(-24,34,-28),"silver",[0,-18,0],[-28,32,-30])
-cube("leading_r",(24,31,-35),(148,34,-28),"silver",[0,18,0],[28,32,-30])
-cube("winglet_l",(-160,30,-51),(-154,52,-43),"body",[0,0,10],[-157,30,-47])
-cube("winglet_l_blue",(-160,45,-51),(-154,53,-43),"blue",[0,0,10],[-157,30,-47])
-cube("winglet_r",(154,30,-51),(160,52,-43),"body",[0,0,-10],[157,30,-47])
-cube("winglet_r_blue",(154,45,-51),(160,53,-43),"blue",[0,0,-10],[157,30,-47])
+wing_mesh("wing_left_smooth",-1)
+wing_mesh("wing_right_smooth",1)
+wing_root_fairing("wing_root_fairing_left",-1)
+wing_root_fairing("wing_root_fairing_right",1)
 
-# Tailplane and vertical stabilizer.
-cube("hstab_l",(-72,47,-160),(-8,51,-124),"body2",[0,-18,0],[-12,49,-145])
-cube("hstab_r",(8,47,-160),(72,51,-124),"body2",[0,18,0],[12,49,-145])
-cube("vstab",(-5,48,-166),(5,112,-135),"body",[-10,0,0],[0,50,-150])
-cube("vstab_blue",(-5,86,-165),(5,113,-143),"blue",[-10,0,0],[0,50,-150])
+cube("winglet_l",(-160,28,-55),(-154,52,-45),"body",[0,0,10],[-157,29,-50])
+cube("winglet_l_blue",(-160,45,-55),(-154,53,-45),"blue",[0,0,10],[-157,29,-50])
+cube("winglet_r",(154,28,-55),(160,52,-45),"body",[0,0,-10],[157,29,-50])
+cube("winglet_r_blue",(154,45,-55),(160,53,-45),"blue",[0,0,-10],[157,29,-50])
 
-# Four high-bypass turbofans.
-def engine(prefix, x, y, z):
-    cube(prefix+"_pylon",(x-5,y+15,z-8),(x+5,y+34,z+11),"metal",[-10,0,0],[x,y+20,z])
+hstab_mesh("hstab_left_smooth",-1)
+hstab_mesh("hstab_right_smooth",1)
 
-    # Hollow nacelle shell. The center is deliberately open so the animated
-    # fan disc is visible but remains recessed behind the intake lip.
-    cube(prefix+"_nacelle_a",(x-11,y+7,z-18),(x+11,y+11,z+18),"body")
-    cube(prefix+"_nacelle_b",(x-11,y-11,z-18),(x+11,y-7,z+18),"body2")
-    cube(prefix+"_nacelle_left",(x-11,y-7,z-18),(x-7,y+7,z+18),"body")
-    cube(prefix+"_nacelle_right",(x+7,y-7,z-18),(x+11,y+7,z+18),"body2")
+vpts=[
+    (-5,49,-166),(5,49,-166),(-4,94,-151),(4,94,-151),(-2,114,-143),(2,114,-143),
+    (-5,47,-166),(5,47,-166),(-4,92,-151),(4,92,-151),(-2,112,-143),(2,112,-143)
+]
+vq=[
+    (0,2,3,1),(2,4,5,3),
+    (7,9,8,6),(9,11,10,8),
+    (0,6,8,2),(2,8,10,4),
+    (1,3,9,7),(3,5,11,9),(4,10,11,5)
+]
+mesh("vertical_tail_smooth",vpts,vq,"body")
+cube("vstab_blue",(-4,88,-159),(4,111,-144),"blue",[-8,0,0],[0,88,-151])
 
-    # Intake lip ring, also hollow.
-    cube(prefix+"_intake_top",(x-10,y+6,z+16),(x+10,y+10,z+20),"dark")
-    cube(prefix+"_intake_bottom",(x-10,y-10,z+16),(x+10,y-6,z+20),"dark")
-    cube(prefix+"_intake_left",(x-10,y-6,z+16),(x-6,y+6,z+20),"dark")
-    cube(prefix+"_intake_right",(x+6,y-6,z+16),(x+10,y+6,z+20),"dark")
-
-    # Rear exhaust ring and center-body detail.
-    cube(prefix+"_exhaust_top",(x-7,y+4,z-21),(x+7,y+7,z-17),"dark")
-    cube(prefix+"_exhaust_bottom",(x-7,y-7,z-21),(x+7,y-4,z-17),"dark")
-    cube(prefix+"_exhaust_left",(x-7,y-4,z-21),(x-4,y+4,z-17),"dark")
-    cube(prefix+"_exhaust_right",(x+4,y-4,z-21),(x+7,y+4,z-17),"dark")
-    cube(prefix+"_core",(x-3,y-3,z-20),(x+3,y+3,z-16),"metal")
-
-engine("eng1",-100,12,-25)
-engine("eng2",-55,13,-10)
-engine("eng3",55,13,-10)
-engine("eng4",100,12,-25)
+for prefix,x,y,z in (
+    ("eng1",-100,12,-25),
+    ("eng2",-55,13,-10),
+    ("eng3",55,13,-10),
+    ("eng4",100,12,-25),
+):
+    cube(prefix+"_pylon",(x-5,y+14,z-9),(x+5,y+34,z+10),"metal",[-10,0,0],[x,y+20,z])
+    nacelle_mesh(prefix,x,y,z)
 
 # Passenger doors, upper-deck doors, cargo doors and handles.
 for side in (-1,1):

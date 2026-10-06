@@ -187,10 +187,10 @@ public final class Boeing747Renderer extends AircraftEntityRenderer<Boeing747Ent
 
         // Visible fan planes sit behind the intake lips, not outside them.
         // Outer engine center z=-25/16, inner z=-10/16; fan is recessed by ~0.30 block.
-        fan(p,b,light,fan,spinner,-6.25F,0.75F,-0.61F,angle);
-        fan(p,b,light,fan,spinner,-3.44F,0.81F, 0.33F,angle + 13.0F);
-        fan(p,b,light,fan,spinner, 3.44F,0.81F, 0.33F,angle + 27.0F);
-        fan(p,b,light,fan,spinner, 6.25F,0.75F,-0.61F,angle + 41.0F);
+        fan(p,b,light,fan,spinner,-6.25F,0.75F,-0.6875F,angle);
+        fan(p,b,light,fan,spinner,-3.44F,0.81F, 0.2500F,angle + 13.0F);
+        fan(p,b,light,fan,spinner, 3.44F,0.81F, 0.2500F,angle + 27.0F);
+        fan(p,b,light,fan,spinner, 6.25F,0.75F,-0.6875F,angle + 41.0F);
     }
 
     private void fan(
