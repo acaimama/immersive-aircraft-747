@@ -63,10 +63,13 @@ public final class Boeing747Renderer extends AircraftEntityRenderer<Boeing747Ent
                         && entity.hasPassenger(Minecraft.getInstance().player)
                         && Minecraft.getInstance().options.getCameraType() == net.minecraft.client.CameraType.FIRST_PERSON;
 
-        // In first-person the camera sits inside the cockpit. Rendering the entire exterior
-        // shell around the camera blocks the windshield, so only third-person/external views
-        // draw the aircraft body. This does not change what other players see.
+        // First-person uses a dedicated cockpit interior. The exterior shell is not drawn
+        // around the camera, but the aircraft is NOT visually deleted: dashboard, windshield
+        // frame, pillars, overhead panel and side consoles remain visible around a clear view.
         if (localFirstPersonPilot) {
+            poseStack.pushPose();
+            renderFirstPersonCockpit(entity, poseStack, buffers, packedLight);
+            poseStack.popPose();
             return;
         }
 
@@ -109,14 +112,63 @@ public final class Boeing747Renderer extends AircraftEntityRenderer<Boeing747Ent
     private void renderCockpitGlass(PoseStack p, MultiBufferSource b, int light) {
         BlockState cockpit = Blocks.TINTED_GLASS.defaultBlockState();
 
-        // Six-piece windshield gives the nose a real cockpit rather than a black painted strip.
-        cuboid(p,b,light,cockpit,-0.84F,3.45F,9.66F,0.62F,0.38F,0.075F,0,-18,0);
-        cuboid(p,b,light,cockpit,-0.28F,3.48F,9.79F,0.48F,0.38F,0.075F,0,-7,0);
-        cuboid(p,b,light,cockpit, 0.28F,3.48F,9.79F,0.48F,0.38F,0.075F,0,7,0);
-        cuboid(p,b,light,cockpit, 0.84F,3.45F,9.66F,0.62F,0.38F,0.075F,0,18,0);
+        // Windshield is seated INTO the reshaped nose instead of floating above it.
+        cuboid(p,b,light,cockpit,-0.52F,3.18F,9.52F,0.70F,0.40F,0.060F,-5,-8,0);
+        cuboid(p,b,light,cockpit, 0.52F,3.18F,9.52F,0.70F,0.40F,0.060F,-5,8,0);
 
-        cuboid(p,b,light,cockpit,-1.28F,3.35F,9.30F,0.48F,0.34F,0.070F,0,-36,0);
-        cuboid(p,b,light,cockpit, 1.28F,3.35F,9.30F,0.48F,0.34F,0.070F,0,36,0);
+        cuboid(p,b,light,cockpit,-1.10F,3.12F,9.30F,0.54F,0.36F,0.060F,-4,-25,0);
+        cuboid(p,b,light,cockpit, 1.10F,3.12F,9.30F,0.54F,0.36F,0.060F,-4,25,0);
+
+        cuboid(p,b,light,cockpit,-1.43F,3.03F,9.00F,0.40F,0.32F,0.055F,-3,-42,0);
+        cuboid(p,b,light,cockpit, 1.43F,3.03F,9.00F,0.40F,0.32F,0.055F,-3,42,0);
+    }
+
+    private void renderFirstPersonCockpit(
+            Boeing747Entity entity,
+            PoseStack p,
+            MultiBufferSource b,
+            int light
+    ) {
+        int full = LightTexture.FULL_BRIGHT;
+
+        BlockState frame = Blocks.GRAY_CONCRETE.defaultBlockState();
+        BlockState dash = Blocks.POLISHED_BLACKSTONE.defaultBlockState();
+        BlockState trim = Blocks.LIGHT_GRAY_CONCRETE.defaultBlockState();
+        BlockState glass = Blocks.LIGHT_BLUE_STAINED_GLASS.defaultBlockState();
+        BlockState screen = Blocks.CYAN_STAINED_GLASS.defaultBlockState();
+        BlockState warm = Blocks.OCHRE_FROGLIGHT.defaultBlockState();
+
+        // Glare shield and instrument panel below the eye line.
+        cuboid(p,b,light,dash,0.0F,3.00F,7.78F,2.55F,0.34F,0.72F,-12,0,0);
+        cuboid(p,b,full,screen,-0.62F,2.98F,7.62F,0.62F,0.16F,0.08F,-12,0,0);
+        cuboid(p,b,full,screen, 0.12F,2.98F,7.62F,0.62F,0.16F,0.08F,-12,0,0);
+        cuboid(p,b,full,screen, 0.78F,2.98F,7.64F,0.40F,0.14F,0.08F,-12,0,0);
+
+        // Lower windshield sill.
+        cuboid(p,b,light,trim,0.0F,3.18F,8.25F,2.78F,0.16F,0.18F,-4,0,0);
+
+        // A-pillars and center post frame the windshield without blocking the horizon.
+        cuboid(p,b,light,frame,-1.34F,3.78F,8.45F,0.15F,1.38F,0.16F,-12,0,-8);
+        cuboid(p,b,light,frame, 1.34F,3.78F,8.45F,0.15F,1.38F,0.16F,-12,0,8);
+        cuboid(p,b,light,frame,0.0F,3.83F,8.66F,0.10F,1.15F,0.12F,-8,0,0);
+
+        // Overhead header / roof keeps the sense of being inside a real cockpit.
+        cuboid(p,b,light,trim,0.0F,4.45F,7.95F,2.75F,0.20F,0.90F,8,0,0);
+        cuboid(p,b,full,warm,0.0F,4.31F,7.67F,0.70F,0.07F,0.24F,8,0,0);
+
+        // Side consoles / side-wall hints.
+        cuboid(p,b,light,dash,-1.22F,2.92F,7.20F,0.46F,0.42F,1.22F,0,0,0);
+        cuboid(p,b,light,dash, 1.22F,2.92F,7.20F,0.46F,0.42F,1.22F,0,0,0);
+        cuboid(p,b,light,trim,-1.47F,3.55F,7.45F,0.12F,0.95F,1.10F,0,0,0);
+        cuboid(p,b,light,trim, 1.47F,3.55F,7.45F,0.12F,0.95F,1.10F,0,0,0);
+
+        // Thin side windshield panes. The central forward view stays physically open.
+        cuboid(p,b,light,glass,-1.02F,3.72F,8.64F,0.52F,0.76F,0.035F,-8,-16,0);
+        cuboid(p,b,light,glass, 1.02F,3.72F,8.64F,0.52F,0.76F,0.035F,-8,16,0);
+
+        // Small yoke column hints reinforce that this is a cockpit, not an invisible camera.
+        cuboid(p,b,light,frame,-0.50F,2.78F,7.25F,0.10F,0.52F,0.10F,-18,0,0);
+        cuboid(p,b,light,frame, 0.50F,2.78F,7.25F,0.10F,0.52F,0.10F,-18,0,0);
     }
 
     private void renderDoorWindows(PoseStack p, MultiBufferSource b, int light) {

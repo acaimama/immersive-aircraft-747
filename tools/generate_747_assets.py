@@ -282,25 +282,44 @@ def wing_root_fairing(name, side):
 
 # Smooth polygon-mesh airframe.
 def main_window_opening(zmid, ymid, xside):
-    return (-120 < zmid < 120) and (38.0 < ymid < 49.0) and (xside > 0.82)
+    # Only remove the near-vertical side strip. This prevents window holes
+    # from creeping onto the crown and becoming visible from above.
+    return (-120 < zmid < 120) and (39.0 < ymid < 48.5) and (xside > 0.94)
 
 fuselage_stations = [
-    (-171,36.5,3.0,4.5),
-    (-165,36.5,9.0,11.0),
-    (-156,36.5,16.0,17.0),
-    (-144,36.5,22.5,21.0),
-    (-126,36.5,27.0,24.0),
-    (-100,36.5,28.0,24.5),
+    # Tail cone.
+    (-172,36.5,2.5,3.5),
+    (-167,36.5,8.0,9.0),
+    (-158,36.5,15.5,16.5),
+    (-146,36.5,22.0,21.0),
+    (-128,36.5,27.0,24.0),
+
+    # Constant-section wide body.
+    (-104,36.5,28.0,24.5),
     (0,36.5,28.0,24.5),
     (100,36.5,28.0,24.5),
-    (122,36.5,27.5,24.0),
-    (138,36.5,24.5,22.0),
-    (151,36.5,20.0,18.5),
-    (161,36.5,14.0,14.0),
-    (168,36.5,7.5,8.0),
-    (171,36.5,2.5,3.0),
+    (116,36.5,28.0,24.5),
+
+    # 747-style nose: broad shoulders, then a rounded radome that drops
+    # slightly toward the tip instead of converging to a sharp cone.
+    (126,36.4,27.6,24.1),
+    (136,36.1,26.0,22.8),
+    (145,35.7,23.5,20.7),
+    (153,35.2,20.0,17.6),
+    (160,34.6,15.8,14.0),
+    (165,34.0,11.5,10.3),
+    (169,33.5,7.5,7.0),
+    (171.5,33.2,4.6,4.6),
 ]
-loft_z("fuselage_smooth", fuselage_stations, 24, "body", main_window_opening)
+loft_z("fuselage_smooth", fuselage_stations, 32, "body", main_window_opening)
+
+# Small rounded-looking radome face closes the otherwise open loft end.
+mesh(
+    "radome_tip_cap",
+    [(-3.2,30.0,171.6),(3.2,30.0,171.6),(3.2,36.4,171.6),(-3.2,36.4,171.6)],
+    [(0,1,2,3)],
+    "body2"
+)
 
 for side in (-1,1):
     xa, xb = ((-28.8,-27.4) if side < 0 else (27.4,28.8))
@@ -310,18 +329,22 @@ for side in (-1,1):
     cube("cheatline",(outer_a,35,-120),(outer_b,39,120),"blue")
 
 def upper_window_opening(zmid, ymid, xside):
-    return (48 < zmid < 119) and (67.0 < ymid < 73.2) and (xside > 0.80)
+    return (48 < zmid < 119) and (67.2 < ymid < 73.0) and (xside > 0.93)
 
 upper_stations = [
-    (34,61.0,12.0,4.0),
-    (45,67.5,21.0,9.0),
-    (60,69.5,23.0,11.5),
-    (105,69.5,23.0,11.5),
-    (119,69.0,21.0,10.5),
-    (130,67.0,16.0,7.5),
-    (139,64.0,8.0,3.5),
+    # Both ends taper down into the main fuselage so the hump has no open seam.
+    (22,60.5,2.8,1.2),
+    (30,61.0,8.5,2.8),
+    (40,64.0,16.5,6.0),
+    (52,68.0,21.5,10.0),
+    (66,69.5,23.0,11.5),
+    (103,69.5,23.0,11.5),
+    (118,69.0,21.5,10.5),
+    (129,67.0,17.0,7.5),
+    (138,63.0,8.0,3.0),
+    (144,60.8,2.8,1.2),
 ]
-loft_z("upper_deck_smooth", upper_stations, 20, "body", upper_window_opening)
+loft_z("upper_deck_smooth", upper_stations, 28, "body", upper_window_opening)
 
 for side in (-1,1):
     xa, xb = ((-23.8,-22.5) if side < 0 else (22.5,23.8))
@@ -382,6 +405,14 @@ for z in (15,48,-83,-48):
 cube("cabin_floor",(-23,20,-115),(23,22,118),"dark")
 cube("aisle",(-4,22,-112),(4,22.8,112),"tan")
 cube("cabin_ceiling",(-21,54,-112),(21,56,112),"body2")
+
+# Secondary inner roof skins sit just under the exterior mesh. They are not
+# visible from normal side views, but prevent sky/top-down views from seeing
+# through microscopic mesh/window seams into an empty cabin.
+cube("main_cabin_inner_roof",(-22.8,56.0,-122),(22.8,58.2,122),"body2")
+cube("upper_cabin_inner_roof",(-17.8,75.0,42),(17.8,77.3,124),"body2")
+cube("hump_aft_blend_liner",(-17.0,57.0,20),(17.0,61.5,48),"body2")
+cube("hump_forward_blend_liner",(-15.0,57.0,120),(15.0,61.8,145),"body2")
 for z in (-72,-24,24,72):
     for x in (-15,-8,8,15):
         cube("seat_base",(x-3,22,z-3),(x+3,27,z+3),"seat")

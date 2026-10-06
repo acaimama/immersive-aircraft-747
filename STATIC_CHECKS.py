@@ -17,8 +17,8 @@ for line in (root / "gradle.properties").read_text().splitlines():
         key, value = line.split("=", 1)
         props[key.strip()] = value.strip()
 
-if props.get("mod_version") != "0.8.0":
-    errors.append("mod_version must be 0.8.0")
+if props.get("mod_version") != "0.9.0":
+    errors.append("mod_version must be 0.9.0")
 if props.get("minecraft_version") != "1.21.1":
     errors.append("minecraft_version must be 1.21.1")
 if props.get("immersive_aircraft_version") != "1.5.2":
@@ -77,6 +77,7 @@ if model_path.exists():
             errors.append(f"BBModel detail count too low: {len(elements)}")
         for name in (
             "fuselage_smooth",
+            "radome_tip_cap",
             "upper_deck_smooth",
             "wing_left_smooth",
             "wing_right_smooth",
@@ -86,6 +87,10 @@ if model_path.exists():
             "eng1_nacelle",
             "eng4_nacelle",
             "cabin_floor",
+            "main_cabin_inner_roof",
+            "upper_cabin_inner_roof",
+            "hump_aft_blend_liner",
+            "hump_forward_blend_liner",
             "door_L1",
             "door_R1",
             "pitot_l",
@@ -139,9 +144,12 @@ for token in (
     "localFirstPersonPilot",
     "main-deck roof",
     "Twelve metallic blades",
+    "renderFirstPersonCockpit",
+    "central forward view stays physically open",
+    "Windshield is seated INTO the reshaped nose",
 ):
     if token not in java:
-        errors.append(f"Java source missing v0.8 token: {token}")
+        errors.append(f"Java source missing v0.9 token: {token}")
 
 sounds = json.loads((root / "src/main/resources/assets/ia747/sounds.json").read_text(encoding="utf-8"))
 for key in ("jet_start","jet_stop","jet_idle","jet_thrust","jet_inside","jet_distant","jet_whine","jet_silent"):
@@ -155,5 +163,5 @@ if errors:
 
 print("STATIC CHECKS PASSED")
 print("Version:", props["mod_version"])
-print("v0.8: polygon-mesh fuselage, hump, wings, wing-root fairings, tail and rounded nacelles verified.")
+print("v0.9: reshaped 747 nose, closed cabin crown/seams and dedicated visible first-person cockpit verified.")
 print("16 seats / >=32 cargo / 20+ collision volumes / four engine trails verified.")
