@@ -68,6 +68,7 @@ public final class Boeing747SoundManager {
         private JetLoop thrust;
         private JetLoop inside;
         private JetLoop distant;
+        private JetLoop whine;
         private float previousTarget;
 
         private JetSet(Boeing747Entity aircraft) {
@@ -98,15 +99,30 @@ public final class Boeing747SoundManager {
             float farOut = clamp((float) (1.0 - Math.max(0.0, distance - 32.0) / 430.0));
             float farScale = interiorView ? 0.0F : farIn * farOut;
 
-            float idleVol = nearScale * (0.62F - power * 0.28F);
-            float thrustVol = nearScale * clamp((power - 0.14F) / 0.86F) * 0.95F;
-            float insideVol = interiorView ? 0.50F + power * 0.38F : 0.0F;
-            float distantVol = farScale * (0.34F + power * 0.52F);
+            // Make the acoustic states clearly different instead of four near-identical layers.
+            // Idle fades away strongly as thrust rises.
+            float idleVol = nearScale * clamp(0.78F - power * 0.92F) * 0.62F;
 
-            idle = updateLoop(idle, Boeing747Sounds.JET_IDLE, idleVol, 0.78F + power * 0.25F);
-            thrust = updateLoop(thrust, Boeing747Sounds.JET_THRUST, thrustVol, 0.72F + power * 0.36F);
-            inside = updateLoop(inside, Boeing747Sounds.JET_INSIDE, insideVol, 0.82F + power * 0.20F);
-            distant = updateLoop(distant, Boeing747Sounds.JET_DISTANT, distantVol, 0.72F + power * 0.16F);
+            // Takeoff / high-power layer is a broad low-mid roar, not a piercing cabin whine.
+            float thrustVol = nearScale * clamp((power - 0.18F) / 0.82F) * 1.00F;
+
+            // Cockpit/cabin first-person view gets only the low-passed interior layer.
+            float insideVol = interiorView ? (0.48F + power * 0.44F) : 0.0F;
+
+            // Distant observers mainly hear low-frequency energy.
+            float distantVol = farScale * (0.28F + power * 0.62F);
+
+            // A subtle fan/compressor whine exists outside near the aircraft,
+            // but it is intentionally absent in the cabin mix.
+            float whineVol = interiorView
+                    ? 0.0F
+                    : nearScale * clamp((power - 0.30F) / 0.70F) * 0.16F;
+
+            idle = updateLoop(idle, Boeing747Sounds.JET_IDLE, idleVol, 0.88F + power * 0.08F);
+            thrust = updateLoop(thrust, Boeing747Sounds.JET_THRUST, thrustVol, 0.88F + power * 0.10F);
+            inside = updateLoop(inside, Boeing747Sounds.JET_INSIDE, insideVol, 0.78F + power * 0.10F);
+            distant = updateLoop(distant, Boeing747Sounds.JET_DISTANT, distantVol, 0.72F + power * 0.08F);
+            whine = updateLoop(whine, Boeing747Sounds.JET_WHINE, whineVol, 0.92F + power * 0.18F);
         }
 
         private JetLoop updateLoop(JetLoop loop, SoundEvent event, float volume, float pitch) {
@@ -131,7 +147,8 @@ public final class Boeing747SoundManager {
             if (thrust != null) thrust.finish();
             if (inside != null) inside.finish();
             if (distant != null) distant.finish();
-            idle = thrust = inside = distant = null;
+            if (whine != null) whine.finish();
+            idle = thrust = inside = distant = whine = null;
         }
 
         private void stopAll() {
