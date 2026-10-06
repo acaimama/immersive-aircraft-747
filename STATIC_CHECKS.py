@@ -17,8 +17,8 @@ for line in (root / "gradle.properties").read_text().splitlines():
         key, value = line.split("=", 1)
         props[key.strip()] = value.strip()
 
-if props.get("mod_version") != "0.5.0":
-    errors.append("mod_version must be 0.5.0")
+if props.get("mod_version") != "0.6.0":
+    errors.append("mod_version must be 0.6.0")
 if props.get("minecraft_version") != "1.21.1":
     errors.append("minecraft_version must be 1.21.1")
 if props.get("immersive_aircraft_version") != "1.5.2":
@@ -52,6 +52,7 @@ for sound in (
     "jet_thrust.ogg",
     "jet_inside.ogg",
     "jet_distant.ogg",
+    "jet_whine.ogg",
     "jet_silent.ogg",
 ):
     path = root / "src/main/resources/assets/ia747/sounds" / sound
@@ -108,6 +109,7 @@ for token in (
     "JET_SILENT",
     "JET_START",
     "JET_THRUST",
+    "JET_WHINE",
     "ClientTickEvents.END_CLIENT_TICK",
     "LIGHT_BLUE_STAINED_GLASS",
     "TINTED_GLASS",
@@ -115,12 +117,14 @@ for token in (
     "renderExteriorLights",
     "renderCabinLighting",
     "LightTexture.FULL_BRIGHT",
+    "engine-off = stationary fan",
+    "recessed inside the nacelle",
 ):
     if token not in java:
         errors.append(f"Java source missing v0.5 token: {token}")
 
 sounds = json.loads((root / "src/main/resources/assets/ia747/sounds.json").read_text(encoding="utf-8"))
-for key in ("jet_start","jet_stop","jet_idle","jet_thrust","jet_inside","jet_distant","jet_silent"):
+for key in ("jet_start","jet_stop","jet_idle","jet_thrust","jet_inside","jet_distant","jet_whine","jet_silent"):
     if key not in sounds:
         errors.append(f"sounds.json missing {key}")
 
@@ -131,5 +135,5 @@ if errors:
 
 print("STATIC CHECKS PASSED")
 print("Version:", props["mod_version"])
-print("Detailed BBModel, external PNG texture and seven original jet sound assets are present.")
+print("Detailed BBModel, corrected embedded fan discs and eight distinct original jet sound assets are present.")
 print("16 seats / >=32 cargo / 20+ collision volumes / four engine trails verified.")
