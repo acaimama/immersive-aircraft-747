@@ -45,7 +45,7 @@ if len(ac["trails"])!=4: errors.append("must have four engine trails")
 if len(ac["boundingBoxes"])<25: errors.append("collision model too sparse")
 
 java="\n".join(p.read_text() for p in (root/"src/main/java").rglob("*.java"))
-for token in ("ABSOLUTE_MAX_BLOCKS_PER_TICK","applyJetCruiseEnvelope","same complete aircraft","24-blade CF6-like"):
+for token in ("ABSOLUTE_MAX_BLOCKS_PER_TICK","applyJetCruiseEnvelope","SAME complete aircraft","24-blade CF6-like"):
     if token not in java: errors.append("missing V2.1 java token "+token)
 for snd in ("jet_start.ogg","jet_stop.ogg","jet_idle.ogg","jet_thrust.ogg","jet_inside.ogg","jet_distant.ogg","jet_whine.ogg","jet_silent.ogg"):
     p=root/"src/main/resources/assets/ia747/sounds"/snd
