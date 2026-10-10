@@ -1,5 +1,5 @@
 from pathlib import Path
-import base64, json, math, random, subprocess, uuid, wave
+import json, math, random, subprocess, uuid, wave, struct, zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "src/main/resources/assets/ia747"
@@ -9,9 +9,10 @@ TEXTURES = ASSETS / "textures/entity"
 for p in (OBJECTS, SOUNDS, TEXTURES):
     p.mkdir(parents=True, exist_ok=True)
 
+# ---------------------------------------------------------------------------
+# Audio: keep the proven v0.9 sound architecture.
+# ---------------------------------------------------------------------------
 SR = 22050
-TEXTURE_B64 = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAA4ElEQVR4nO3WIQoCURSF4XkyyZW4AME9WCcLgmAVm2BQsE2zGDSJSzBMMghjNBmMNkURq02tpjOgyAXv/9Xzhne58A4TjufrMxJOl5uKo6SfyTzaT2XcbLVlvsi2Mk/rD5k3RkuZl2TqAAuwHsAaC7AewBoLsB7AWryrVeWBblqR+WFQlvnqPi8cIs83hWd+JTa7+c2w1wmffpusv7vb/RNgAdYDWGMB1gNYYwHWAwAwFcaTmf7ZB/DP6ADANzoA8I0OAHyjAwDf6ADANzoA8I0OAHyjAwDf6ADANzoA8O0FMPswSkOB8wsAAAAASUVORK5CYII="
-(TEXTURES / "boeing_747_400_texture.png").write_bytes(base64.b64decode(TEXTURE_B64))
 
 def clamp(v):
     return max(-1.0, min(1.0, v))
@@ -28,15 +29,9 @@ def make_ogg(name, duration, fn):
         q = int(clamp(value * gain) * 32767)
         pcm += q.to_bytes(2, "little", signed=True)
     with wave.open(str(wav), "wb") as f:
-        f.setnchannels(1)
-        f.setsampwidth(2)
-        f.setframerate(SR)
+        f.setnchannels(1); f.setsampwidth(2); f.setframerate(SR)
         f.writeframes(bytes(pcm))
-    subprocess.run(
-        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav),
-         "-c:a", "libvorbis", "-q:a", "3", str(ogg)],
-        check=True
-    )
+    subprocess.run(["ffmpeg","-y","-loglevel","error","-i",str(wav),"-c:a","libvorbis","-q:a","3",str(ogg)], check=True)
     wav.unlink()
 
 def harmonic_set(values, seed):
@@ -46,414 +41,382 @@ def harmonic_set(values, seed):
 def harmonics(t, parts):
     return sum(amp * math.sin(math.tau * freq * t + phase) for freq, amp, phase in parts)
 
-idle = harmonic_set([
-    (42, .46), (84, .24), (126, .12), (210, .10),
-    (315, .07), (420, .045), (630, .025)
-], 7471)
+idle = harmonic_set([(42,.46),(84,.24),(126,.12),(210,.10),(315,.07),(420,.045),(630,.025)],7471)
+thrust = harmonic_set([(50,.38),(75,.27),(100,.22),(125,.18),(175,.15),(225,.13),(300,.12),(400,.105),(550,.085),(700,.065),(900,.048),(1150,.032),(1400,.020),(1600,.012)],7472)
+inside = harmonic_set([(38,.55),(55,.34),(76,.26),(110,.18),(145,.13),(190,.09),(260,.055),(360,.03)],7473)
+distant = harmonic_set([(28,.58),(42,.36),(56,.25),(84,.16),(112,.10),(168,.06),(240,.025)],7474)
+whine = harmonic_set([(1200,.14),(1450,.11),(1700,.085),(1950,.060),(2250,.040),(2550,.022)],7475)
 
-# Broad high-power roar: much denser low/mid spectrum than idle.
-thrust = harmonic_set([
-    (50, .38), (75, .27), (100, .22), (125, .18),
-    (175, .15), (225, .13), (300, .12), (400, .105),
-    (550, .085), (700, .065), (900, .048), (1150, .032),
-    (1400, .020), (1600, .012)
-], 7472)
-
-# Interior is intentionally low-passed: mostly rumble and structure-borne components.
-inside = harmonic_set([
-    (38, .55), (55, .34), (76, .26), (110, .18),
-    (145, .13), (190, .09), (260, .055), (360, .03)
-], 7473)
-
-# Distant fly-by is even more low-frequency dominant.
-distant = harmonic_set([
-    (28, .58), (42, .36), (56, .25), (84, .16),
-    (112, .10), (168, .06), (240, .025)
-], 7474)
-
-# Exterior-only compressor/fan tone. Kept subtle in the mixer.
-whine = harmonic_set([
-    (1200, .14), (1450, .11), (1700, .085),
-    (1950, .060), (2250, .040), (2550, .022)
-], 7475)
-
-make_ogg("jet_idle", 4.0, lambda t: harmonics(t, idle) * (0.985 + 0.015 * math.sin(math.pi*t)))
-make_ogg("jet_thrust", 4.0, lambda t: harmonics(t, thrust) * (0.94 + 0.06 * math.sin(math.tau*1.5*t)))
-make_ogg("jet_inside", 4.0, lambda t: harmonics(t, inside) * (0.97 + 0.03 * math.sin(math.tau*0.75*t)))
-make_ogg("jet_distant", 4.0, lambda t: harmonics(t, distant) * (0.98 + 0.02 * math.sin(math.tau*0.5*t)))
-make_ogg("jet_whine", 4.0, lambda t: harmonics(t, whine) * (0.96 + 0.04 * math.sin(math.tau*2.0*t)))
+make_ogg("jet_idle",4.0,lambda t:harmonics(t,idle)*(0.985+0.015*math.sin(math.pi*t)))
+make_ogg("jet_thrust",4.0,lambda t:harmonics(t,thrust)*(0.94+0.06*math.sin(math.tau*1.5*t)))
+make_ogg("jet_inside",4.0,lambda t:harmonics(t,inside)*(0.97+0.03*math.sin(math.tau*.75*t)))
+make_ogg("jet_distant",4.0,lambda t:harmonics(t,distant)*(0.98+0.02*math.sin(math.tau*.5*t)))
+make_ogg("jet_whine",4.0,lambda t:harmonics(t,whine)*(0.96+0.04*math.sin(math.tau*2*t)))
 
 def startup(t):
-    ramp = min(1.0, t / 2.4)
-    fade = min(1.0, max(0.0, (3.4 - t) / 0.25))
-    low = .26 * math.sin(math.tau*42*t) + .10 * math.sin(math.tau*84*t)
-    # Rising spool tone, deliberately less piercing than v0.5.
-    phase = math.tau * (85*t + 85*t*t)
-    spool = .16 * math.sin(phase) + .06 * math.sin(2*phase + .4)
-    return ramp * fade * (low + spool)
+    ramp=min(1.0,t/2.4); fade=min(1.0,max(0.0,(3.4-t)/.25))
+    low=.26*math.sin(math.tau*42*t)+.10*math.sin(math.tau*84*t)
+    phase=math.tau*(85*t+85*t*t)
+    return ramp*fade*(low+.16*math.sin(phase)+.06*math.sin(2*phase+.4))
 
 def shutdown(t):
-    env = math.exp(-1.20*t)
-    phase = math.tau * (360*t - 42*t*t)
-    return env * (.20*math.sin(phase) + .10*math.sin(.5*phase) + .24*math.sin(math.tau*42*t))
+    env=math.exp(-1.20*t); phase=math.tau*(360*t-42*t*t)
+    return env*(.20*math.sin(phase)+.10*math.sin(.5*phase)+.24*math.sin(math.tau*42*t))
 
-make_ogg("jet_start", 3.4, startup)
-make_ogg("jet_stop", 3.0, shutdown)
-make_ogg("jet_silent", .25, lambda t: 0.0)
+make_ogg("jet_start",3.4,startup)
+make_ogg("jet_stop",3.0,shutdown)
+make_ogg("jet_silent",.25,lambda t:0.0)
 
-patch = {
-    "body":[0,0,8,8], "body2":[8,0,16,8], "blue":[16,0,24,8],
-    "dark":[24,0,32,8], "metal":[32,0,40,8], "seat":[40,0,48,8],
-    "tan":[48,0,56,8], "black":[56,0,64,8],
-    "red":[0,8,8,16], "green":[8,8,16,16],
-    "yellow":[16,8,24,16], "silver":[24,8,32,16]
+# ---------------------------------------------------------------------------
+# Original texture atlas: pearl white + deep navy + metals + cabin materials.
+# No external/copyrighted texture assets are used.
+# ---------------------------------------------------------------------------
+W=H=128
+palette = {
+    "pearl": (232,236,240,255),
+    "pearl2": (204,212,220,255),
+    "navy": (18,31,58,255),
+    "navy2": (31,52,88,255),
+    "metal": (150,156,162,255),
+    "darkmetal": (54,58,64,255),
+    "black": (18,20,23,255),
+    "glass": (50,83,105,255),
+    "seat": (49,61,77,255),
+    "tan": (174,153,118,255),
+    "red": (142,31,34,255),
+    "green": (37,120,73,255),
+    "warm": (224,199,138,255),
+    "silver": (188,194,201,255),
+    "floor": (47,49,52,255),
+    "screen": (35,134,154,255),
 }
-def uid():
-    return str(uuid.uuid4())
+names=list(palette)
+cell=32
+pixels=bytearray(W*H*4)
+for idx,name in enumerate(names):
+    x0=(idx%4)*cell; y0=(idx//4)*cell
+    col=palette[name]
+    for y in range(y0,min(H,y0+cell)):
+        for x in range(x0,min(W,x0+cell)):
+            o=(y*W+x)*4
+            # tiny deterministic variation gives pearl/metal surfaces less toy-flat appearance
+            delta=((x+y+idx*7)%5)-2
+            pixels[o:o+4]=bytes((max(0,min(255,col[0]+delta)),max(0,min(255,col[1]+delta)),max(0,min(255,col[2]+delta)),col[3]))
 
-def face_map(material):
-    uv = patch[material]
-    return {side:{"uv":uv,"texture":0} for side in ("north","east","south","west","up","down")}
+def png_chunk(tag,data):
+    return struct.pack(">I",len(data))+tag+data+struct.pack(">I",zlib.crc32(tag+data)&0xffffffff)
 
-elements = []
-outliner = []
+raw=b"".join(b"\x00"+bytes(pixels[y*W*4:(y+1)*W*4]) for y in range(H))
+png=b"\x89PNG\r\n\x1a\n"+png_chunk(b"IHDR",struct.pack(">IIBBBBB",W,H,8,6,0,0,0))+png_chunk(b"IDAT",zlib.compress(raw,9))+png_chunk(b"IEND",b"")
+(TEXTURES/"boeing_747_400_texture.png").write_bytes(png)
 
-def cube(name, fr, to, material="body", rotation=None, origin=None):
-    ident = uid()
-    e = {
-        "name":name, "box_uv":False, "rescale":False, "locked":False,
-        "render_order":"default", "allow_mirror_modeling":True,
-        "from":list(fr), "to":list(to), "autouv":0, "color":0,
-        "origin":list(origin or [0,0,0]), "faces":face_map(material),
-        "type":"cube", "uuid":ident
-    }
-    if rotation is not None:
-        e["rotation"] = list(rotation)
-    elements.append(e)
+patch={}
+for idx,name in enumerate(names):
+    x=(idx%4)*cell; y=(idx//4)*cell
+    patch[name]=[x,y,x+cell,y+cell]
+
+# ---------------------------------------------------------------------------
+# BBModel helpers. 1 Minecraft block = 1 metre. BBModel units = 1/16 block.
+# ---------------------------------------------------------------------------
+S=16.0
+elements=[]
+outliner=[]
+
+def uid(): return str(uuid.uuid4())
+def U(v): return v*S
+
+def uv_faces(material):
+    uv=patch[material]
+    return {s:{"uv":uv,"texture":0} for s in ("north","east","south","west","up","down")}
+
+def cube_m(name, fr, to, material="pearl", rotation=None, origin=None):
+    ident=uid()
+    e={"name":name,"box_uv":False,"rescale":False,"locked":False,
+       "render_order":"default","allow_mirror_modeling":True,
+       "from":[U(v) for v in fr],"to":[U(v) for v in to],"autouv":0,"color":0,
+       "origin":[U(v) for v in (origin or (0,0,0))],"faces":uv_faces(material),
+       "type":"cube","uuid":ident}
+    if rotation is not None: e["rotation"]=list(rotation)
+    elements.append(e); outliner.append(ident)
+
+def mesh_raw(name, positions_m, quads, material="pearl"):
+    ident=uid()
+    vertices={f"v{i}":[U(v) for v in p] for i,p in enumerate(positions_m)}
+    uv=patch[material]; faces={}
+    for fi,q in enumerate(quads):
+        ids=[f"v{i}" for i in q]
+        faces[f"f{fi}"]={"uv":{
+            ids[0]:[uv[0],uv[1]],ids[1]:[uv[0],uv[3]],
+            ids[2]:[uv[2],uv[3]],ids[3]:[uv[2],uv[1]]
+        },"vertices":ids,"texture":0}
+    elements.append({"name":name,"color":0,"origin":[0,0,0],"rotation":[0,0,0],
+                     "export":True,"visibility":True,"locked":False,
+                     "render_order":"default","allow_mirror_modeling":True,
+                     "vertices":vertices,"faces":faces,"type":"mesh","uuid":ident})
     outliner.append(ident)
 
-
-def mesh(name, positions, quad_indices, material="body"):
-    ident = uid()
-    vertices = {f"v{i}": list(v) for i, v in enumerate(positions)}
-    uv = patch[material]
-    faces = {}
-    for fi, quad in enumerate(quad_indices):
-        ids = [f"v{i}" for i in quad]
-        faces[f"f{fi}"] = {
-            "uv": {
-                ids[0]: [uv[0], uv[1]],
-                ids[1]: [uv[0], uv[3]],
-                ids[2]: [uv[2], uv[3]],
-                ids[3]: [uv[2], uv[1]],
-            },
-            "vertices": ids,
-            "texture": 0
-        }
-    elements.append({
-        "name": name,
-        "color": 0,
-        "origin": [0,0,0],
-        "rotation": [0,0,0],
-        "export": True,
-        "visibility": True,
-        "locked": False,
-        "render_order": "default",
-        "allow_mirror_modeling": True,
-        "vertices": vertices,
-        "faces": faces,
-        "type": "mesh",
-        "uuid": ident
-    })
-    outliner.append(ident)
-
-def loft_z(name, stations, segments=24, material="body", omit=None):
-    positions = []
-    for z, cy, rx, ry in stations:
+def loft_filtered(name, stations, segments, material, include, omit=None):
+    pos=[]
+    for z,cy,rx,ry in stations:
         for j in range(segments):
-            a = math.tau * j / segments
-            positions.append((rx * math.cos(a), cy + ry * math.sin(a), z))
-    quads = []
+            a=math.tau*j/segments
+            pos.append((rx*math.cos(a),cy+ry*math.sin(a),z))
+    q=[]
     for i in range(len(stations)-1):
-        z0, cy0, rx0, ry0 = stations[i]
-        z1, cy1, rx1, ry1 = stations[i+1]
+        z0,cy0,rx0,ry0=stations[i]; z1,cy1,rx1,ry1=stations[i+1]
         for j in range(segments):
-            j2 = (j + 1) % segments
-            a = math.tau * (j + 0.5) / segments
-            zmid = (z0 + z1) * 0.5
-            cymid = (cy0 + cy1) * 0.5
-            rymid = (ry0 + ry1) * 0.5
-            ymid = cymid + rymid * math.sin(a)
-            xside = abs(math.cos(a))
-            if omit and omit(zmid, ymid, xside):
-                continue
-            a0 = i*segments + j
-            a1 = i*segments + j2
-            b1 = (i+1)*segments + j2
-            b0 = (i+1)*segments + j
-            quads.append((a0,a1,b1,b0))
-    mesh(name, positions, quads, material)
+            j2=(j+1)%segments
+            a=math.tau*(j+.5)/segments
+            zmid=(z0+z1)*.5; cym=(cy0+cy1)*.5; rxm=(rx0+rx1)*.5; rym=(ry0+ry1)*.5
+            xmid=rxm*math.cos(a); ymid=cym+rym*math.sin(a)
+            if not include(zmid,xmid,ymid): continue
+            if omit and omit(zmid,xmid,ymid): continue
+            a0=i*segments+j; a1=i*segments+j2; b1=(i+1)*segments+j2; b0=(i+1)*segments+j
+            q.append((a0,a1,b1,b0))
+    mesh_raw(name,pos,q,material)
 
-def wing_mesh(name, side):
-    s = -1 if side < 0 else 1
-    pts = [
-        (20*s,34,44),(20*s,34,-28),
-        (82*s,31,18),(82*s,31,-42),
-        (160*s,29,-8),(160*s,29,-53),
-        (20*s,29,44),(20*s,29,-28),
-        (82*s,28,18),(82*s,28,-42),
-        (160*s,27,-8),(160*s,27,-53),
-    ]
-    q = [
-        (0,2,3,1),(2,4,5,3),
-        (7,9,8,6),(9,11,10,8),
-        (0,6,8,2),(2,8,10,4),
-        (1,3,9,7),(3,5,11,9),(4,10,11,5)
-    ]
-    mesh(name, pts, q, "body2")
+# ---------------------------------------------------------------------------
+# 747-400 1:1 reference envelope
+# length 70.66 m, span 64.44 m, height 19.41 m.
+# Coordinate convention: +Z nose, -Z tail, X wing span, Y up from ground.
+# ---------------------------------------------------------------------------
+NOSE=35.33
+TAIL=-35.33
+FUSE_Y=7.35
+FUSE_RX=3.25
+FUSE_RY=3.30
 
-def hstab_mesh(name, side):
-    s = -1 if side < 0 else 1
-    pts = [
-        (8*s,51,-132),(8*s,51,-160),(72*s,49,-142),(72*s,49,-166),
-        (8*s,47,-132),(8*s,47,-160),(72*s,47,-142),(72*s,47,-166)
-    ]
-    q=[(0,2,3,1),(5,7,6,4),(0,4,6,2),(1,3,7,5),(2,6,7,3)]
-    mesh(name, pts, q, "body2")
+stations=[
+    (-35.33,7.35,.25,.35),(-34.7,7.35,.9,1.0),(-33.3,7.35,1.8,2.0),(-31.2,7.35,2.7,2.8),
+    (-28.5,7.35,3.18,3.25),(-24.0,7.35,3.25,3.30),(-16.0,7.35,3.25,3.30),
+    (-6.0,7.35,3.25,3.30),(6.0,7.35,3.25,3.30),(16.0,7.35,3.25,3.30),(23.5,7.35,3.25,3.30),
+    (27.0,7.30,3.20,3.22),(29.3,7.18,3.05,3.05),(31.1,6.98,2.78,2.78),
+    (32.5,6.72,2.40,2.45),(33.55,6.45,1.95,2.05),(34.35,6.18,1.45,1.58),
+    (34.92,5.98,.95,1.08),(35.33,5.86,.42,.52)
+]
 
-def nacelle_mesh(prefix, x, y, z):
-    seg = 20
-    stations = [(-21,7.2),(-17,8.2),(-9,10.2),(8,11.0),(15,10.7),(20,10.0)]
-    positions = []
-    for dz,r in stations:
-        for j in range(seg):
-            a = math.tau*j/seg
-            positions.append((x+r*math.cos(a), y+r*math.sin(a), z+dz))
-    q = []
-    for i in range(len(stations)-1):
-        for j in range(seg):
-            j2=(j+1)%seg
-            q.append((i*seg+j,i*seg+j2,(i+1)*seg+j2,(i+1)*seg+j))
-    mesh(prefix+"_nacelle",positions,q,"body")
+def shell_omit(z,x,y):
+    # Main deck side window strip; crown remains closed.
+    if -27.0 < z < 25.7 and 7.20 < y < 8.18 and abs(x) > 3.05:
+        return True
+    # Real cockpit windshield opening. This is the key to a true first-person view:
+    # the full aircraft can remain rendered because the pilot looks through an actual hole.
+    if 28.7 < z < 33.7 and 8.35 < y < 10.05 and abs(x) < 2.85:
+        return True
+    return False
 
-    positions = []
-    outer, inner = 10.0, 7.4
-    for radius,dz in ((outer,20.0),(inner,19.2)):
-        for j in range(seg):
-            a=math.tau*j/seg
-            positions.append((x+radius*math.cos(a),y+radius*math.sin(a),z+dz))
-    q=[]
-    for j in range(seg):
-        j2=(j+1)%seg
-        q.append((j,j2,seg+j2,seg+j))
-    mesh(prefix+"_intake_lip",positions,q,"dark")
+# Pearl upper shell / navy lower belly share the same vertices, so the transition is seamless.
+loft_filtered("fuselage_pearl_1to1",stations,40,"pearl",lambda z,x,y:y>=5.85,shell_omit)
+loft_filtered("fuselage_navy_belly_1to1",stations,40,"navy",lambda z,x,y:y<5.85,shell_omit)
 
-    positions=[]
-    for radius,dz in ((7.4,19.2),(7.1,12.0)):
-        for j in range(seg):
-            a=math.tau*j/seg
-            positions.append((x+radius*math.cos(a),y+radius*math.sin(a),z+dz))
-    q=[]
-    for j in range(seg):
-        j2=(j+1)%seg
-        q.append((j,j2,seg+j2,seg+j))
-    mesh(prefix+"_intake_duct",positions,q,"dark")
+# Close nose/tail tips.
+mesh_raw("radome_cap_1to1",[(-.38,5.45,35.34),(.38,5.45,35.34),(.38,6.28,35.34),(-.38,6.28,35.34)],[(0,1,2,3)],"pearl2")
+mesh_raw("apu_tail_cap_1to1",[(-.18,7.05,-35.34),(.18,7.05,-35.34),(.18,7.65,-35.34),(-.18,7.65,-35.34)],[(0,1,2,3)],"darkmetal")
 
-def wing_root_fairing(name, side):
+# Main deck window frames around the continuous transparent glass strip.
+for side in (-1,1):
+    x0=side*3.255
+    # lower/upper sill strips seal the fuselage around windows
+    cube_m("main_window_lower_sill",((x0-.04 if side<0 else x0-.02),6.90,-27.2),(x0+.02 if side<0 else x0+.04,7.22,25.9),"pearl2")
+    cube_m("main_window_upper_sill",((x0-.04 if side<0 else x0-.02),8.15,-27.2),(x0+.02 if side<0 else x0+.04,8.50,25.9),"pearl")
+    z=-26.6
+    while z<25.7:
+        cube_m("main_window_pillar",((x0-.045 if side<0 else x0-.02),7.18,z),(x0+.02 if side<0 else x0+.045,8.19,z+.13),"pearl2")
+        z+=.82
+
+# Signature upper-deck hump: continuous curve buried into main fuselage at both ends.
+hump=[
+    (15.0,10.38,.45,.18),(16.2,10.55,1.35,.45),(17.7,10.88,2.25,.88),(19.3,11.25,2.72,1.30),
+    (21.0,11.55,2.92,1.58),(23.0,11.70,3.00,1.72),(25.2,11.72,2.95,1.72),
+    (27.1,11.60,2.75,1.55),(28.6,11.35,2.35,1.18),(29.7,10.95,1.75,.72),(30.5,10.62,.75,.25)
+]
+def hump_omit(z,x,y):
+    return 18.5<z<28.4 and 11.25<y<12.05 and abs(x)>2.45
+loft_filtered("upper_deck_hump_1to1",hump,36,"pearl",lambda z,x,y:True,hump_omit)
+for side in (-1,1):
+    x0=side*2.92
+    z=19.0
+    while z<28.25:
+        cube_m("upper_window_pillar",((x0-.04 if side<0 else x0-.02),11.22,z),(x0+.02 if side<0 else x0+.04,12.05,z+.12),"pearl2")
+        z+=.78
+
+# Navy cheatline below the windows, slightly proud of the skin to avoid z fighting.
+for side in (-1,1):
+    x=side*3.285
+    cube_m("navy_cheatline",((x-.025 if side<0 else x-.015),6.62,-27.2),(x+.015 if side<0 else x+.025,6.88,27.2),"navy2")
+
+# Wings: realistic full span 64.44 m, thin tapered mesh, swept trailing geometry.
+def wing(name,side):
     s=-1 if side<0 else 1
-    stations=[
-        (27*s,36.5,17,18),
-        (34*s,35.5,15,15),
-        (43*s,34.0,11,11),
-        (52*s,32.5,6,7)
+    pts=[
+        (3.0*s,7.10,8.1),(3.0*s,7.05,-7.8),
+        (12.0*s,6.82,5.0),(12.0*s,6.68,-10.2),
+        (22.0*s,6.38,1.0),(22.0*s,6.18,-13.3),
+        (32.22*s,6.05,-4.8),(32.22*s,5.88,-15.2),
+        (3.0*s,6.70,8.1),(3.0*s,6.65,-7.8),
+        (12.0*s,6.48,5.0),(12.0*s,6.34,-10.2),
+        (22.0*s,6.08,1.0),(22.0*s,5.90,-13.3),
+        (32.22*s,5.84,-4.8),(32.22*s,5.70,-15.2)
     ]
-    seg=16
-    positions=[]
-    for x,cy,rz,ry in stations:
+    q=[(0,2,3,1),(2,4,5,3),(4,6,7,5),(9,11,10,8),(11,13,12,10),(13,15,14,12),
+       (0,8,10,2),(2,10,12,4),(4,12,14,6),(1,3,11,9),(3,5,13,11),(5,7,15,13),(6,14,15,7)]
+    mesh_raw(name,pts,q,"pearl2")
+wing("left_wing_1to1",-1); wing("right_wing_1to1",1)
+
+# Wing root fairings provide the smooth aircraft-like transition requested by the user.
+def fairing(name,side):
+    s=-1 if side<0 else 1; seg=20
+    st=[(3.0*s,7.0,4.6,1.65),(4.5*s,6.85,4.2,1.4),(6.3*s,6.65,3.3,1.05),(8.0*s,6.50,2.1,.72)]
+    pos=[]
+    for x,cy,rz,ry in st:
         for j in range(seg):
-            a=math.tau*j/seg
-            positions.append((x,cy+ry*math.sin(a),-3+rz*math.cos(a)))
+            a=math.tau*j/seg; pos.append((x,cy+ry*math.sin(a),-.7+rz*math.cos(a)))
     q=[]
-    for i in range(len(stations)-1):
+    for i in range(len(st)-1):
         for j in range(seg):
-            j2=(j+1)%seg
-            q.append((i*seg+j,i*seg+j2,(i+1)*seg+j2,(i+1)*seg+j))
-    mesh(name,positions,q,"body2")
+            j2=(j+1)%seg; q.append((i*seg+j,i*seg+j2,(i+1)*seg+j2,(i+1)*seg+j))
+    mesh_raw(name,pos,q,"pearl2")
+fairing("left_wing_body_fairing_1to1",-1); fairing("right_wing_body_fairing_1to1",1)
 
-# Smooth polygon-mesh airframe.
-def main_window_opening(zmid, ymid, xside):
-    # Only remove the near-vertical side strip. This prevents window holes
-    # from creeping onto the crown and becoming visible from above.
-    return (-120 < zmid < 120) and (39.0 < ymid < 48.5) and (xside > 0.94)
-
-fuselage_stations = [
-    # Tail cone.
-    (-172,36.5,2.5,3.5),
-    (-167,36.5,8.0,9.0),
-    (-158,36.5,15.5,16.5),
-    (-146,36.5,22.0,21.0),
-    (-128,36.5,27.0,24.0),
-
-    # Constant-section wide body.
-    (-104,36.5,28.0,24.5),
-    (0,36.5,28.0,24.5),
-    (100,36.5,28.0,24.5),
-    (116,36.5,28.0,24.5),
-
-    # 747-style nose: broad shoulders, then a rounded radome that drops
-    # slightly toward the tip instead of converging to a sharp cone.
-    (126,36.4,27.6,24.1),
-    (136,36.1,26.0,22.8),
-    (145,35.7,23.5,20.7),
-    (153,35.2,20.0,17.6),
-    (160,34.6,15.8,14.0),
-    (165,34.0,11.5,10.3),
-    (169,33.5,7.5,7.0),
-    (171.5,33.2,4.6,4.6),
-]
-loft_z("fuselage_smooth", fuselage_stations, 32, "body", main_window_opening)
-
-# Small rounded-looking radome face closes the otherwise open loft end.
-mesh(
-    "radome_tip_cap",
-    [(-3.2,30.0,171.6),(3.2,30.0,171.6),(3.2,36.4,171.6),(-3.2,36.4,171.6)],
-    [(0,1,2,3)],
-    "body2"
-)
-
+# 747-400 winglets.
 for side in (-1,1):
-    xa, xb = ((-28.8,-27.4) if side < 0 else (27.4,28.8))
-    for z in range(-120,121,15):
-        cube("window_pillar",(xa,38,z-2),(xb,49,z+2),"body2")
-    outer_a, outer_b = ((-29.1,-28.3) if side < 0 else (28.3,29.1))
-    cube("cheatline",(outer_a,35,-120),(outer_b,39,120),"blue")
+    x=side*31.9
+    cube_m("winglet",((x-.20 if side<0 else x-.05),5.85,-15.15),(x+.05 if side<0 else x+.20,8.55,-14.55),"pearl",[0,0,10*side],[x,5.9,-14.8])
+    cube_m("winglet_navy",((x-.21 if side<0 else x-.04),7.65,-15.16),(x+.04 if side<0 else x+.21,8.62,-14.54),"navy",[0,0,10*side],[x,5.9,-14.8])
 
-def upper_window_opening(zmid, ymid, xside):
-    return (48 < zmid < 119) and (67.2 < ymid < 73.0) and (xside > 0.93)
+# Tailplanes and vertical stabilizer.
+def hstab(name,side):
+    s=-1 if side<0 else 1
+    pts=[(2.0*s,10.0,-28.0),(2.0*s,10.0,-34.0),(13.0*s,9.75,-30.2),(13.0*s,9.75,-35.0),
+         (2.0*s,9.65,-28.0),(2.0*s,9.65,-34.0),(13.0*s,9.48,-30.2),(13.0*s,9.48,-35.0)]
+    mesh_raw(name,pts,[(0,2,3,1),(5,7,6,4),(0,4,6,2),(1,3,7,5),(2,6,7,3)],"pearl2")
+hstab("left_hstab_1to1",-1); hstab("right_hstab_1to1",1)
+vpts=[(-.42,9.2,-32.4),(.42,9.2,-32.4),(-.32,15.1,-30.5),(.32,15.1,-30.5),(-.16,19.41,-27.2),(.16,19.41,-27.2),
+       (-.42,8.9,-32.4),(.42,8.9,-32.4),(-.32,14.8,-30.5),(.32,14.8,-30.5),(-.16,19.10,-27.2),(.16,19.10,-27.2)]
+vq=[(0,2,3,1),(2,4,5,3),(7,9,8,6),(9,11,10,8),(0,6,8,2),(2,8,10,4),(1,3,9,7),(3,5,11,9),(4,10,11,5)]
+mesh_raw("vertical_tail_1to1",vpts,vq,"navy")
 
-upper_stations = [
-    # Both ends taper down into the main fuselage so the hump has no open seam.
-    (22,60.5,2.8,1.2),
-    (30,61.0,8.5,2.8),
-    (40,64.0,16.5,6.0),
-    (52,68.0,21.5,10.0),
-    (66,69.5,23.0,11.5),
-    (103,69.5,23.0,11.5),
-    (118,69.0,21.5,10.5),
-    (129,67.0,17.0,7.5),
-    (138,63.0,8.0,3.0),
-    (144,60.8,2.8,1.2),
-]
-loft_z("upper_deck_smooth", upper_stations, 28, "body", upper_window_opening)
+# CF6-80C2-inspired engines. Fan diameter 2.362 m, overall core/nacelle length ~4.1 m.
+def engine(prefix,x,y,z):
+    seg=32
+    # Pylon
+    cube_m(prefix+"_pylon",(x-.32,y+.95,z-1.0),(x+.32,y+2.35,z+1.05),"metal",[-9,0,0],[x,y+1.4,z])
+    # Outer nacelle smooth loft
+    st=[(-2.05,.72),(-1.82,.91),(-1.20,1.10),(.55,1.20),(1.45,1.18),(2.05,1.08)]
+    pos=[]
+    for dz,r in st:
+        for j in range(seg):
+            a=math.tau*j/seg; pos.append((x+r*math.cos(a),y+r*math.sin(a),z+dz))
+    q=[]
+    for i in range(len(st)-1):
+        for j in range(seg):
+            j2=(j+1)%seg; q.append((i*seg+j,i*seg+j2,(i+1)*seg+j2,(i+1)*seg+j))
+    mesh_raw(prefix+"_cf6_nacelle",pos,q,"pearl")
+    # Metallic intake lip ring, radius close to 1.18m.
+    pos=[]
+    for r,dz in ((1.18,2.08),(.93,1.91)):
+        for j in range(seg):
+            a=math.tau*j/seg; pos.append((x+r*math.cos(a),y+r*math.sin(a),z+dz))
+    q=[(j,(j+1)%seg,seg+(j+1)%seg,seg+j) for j in range(seg)]
+    mesh_raw(prefix+"_intake_lip",pos,q,"silver")
+    # Dark intake duct
+    pos=[]
+    for r,dz in ((.93,1.91),(.88,1.08)):
+        for j in range(seg):
+            a=math.tau*j/seg; pos.append((x+r*math.cos(a),y+r*math.sin(a),z+dz))
+    mesh_raw(prefix+"_intake_duct",pos,q,"darkmetal")
+    # Rear turbine/nozzle ring + exhaust cone so rear view is never hollow.
+    pos=[]
+    for r,dz in ((.73,-2.02),(.58,-2.24)):
+        for j in range(seg):
+            a=math.tau*j/seg; pos.append((x+r*math.cos(a),y+r*math.sin(a),z+dz))
+    mesh_raw(prefix+"_rear_nozzle",pos,q,"darkmetal")
+    # central exhaust plug
+    cone=[(x-.26,y-.26,z-2.25),(x+.26,y-.26,z-2.25),(x+.26,y+.26,z-2.25),(x-.26,y+.26,z-2.25),
+          (x-.10,y-.10,z-2.65),(x+.10,y-.10,z-2.65),(x+.10,y+.10,z-2.65),(x-.10,y+.10,z-2.65)]
+    mesh_raw(prefix+"_exhaust_plug",cone,[(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7),(4,5,6,7)],"metal")
 
+engines=[("eng1",-19.3,4.75,-3.2),("eng2",-9.2,4.95,.2),("eng3",9.2,4.95,.2),("eng4",19.3,4.75,-3.2)]
+for e in engines: engine(*e)
+
+# Doors: actual proportions, integrated on the side skin.
 for side in (-1,1):
-    xa, xb = ((-23.8,-22.5) if side < 0 else (22.5,23.8))
-    for z in (48,62,76,90,104,118):
-        cube("upper_pillar",(xa,67,z-2),(xb,73,z+2),"body2")
-
-wing_mesh("wing_left_smooth",-1)
-wing_mesh("wing_right_smooth",1)
-wing_root_fairing("wing_root_fairing_left",-1)
-wing_root_fairing("wing_root_fairing_right",1)
-
-cube("winglet_l",(-160,28,-55),(-154,52,-45),"body",[0,0,10],[-157,29,-50])
-cube("winglet_l_blue",(-160,45,-55),(-154,53,-45),"blue",[0,0,10],[-157,29,-50])
-cube("winglet_r",(154,28,-55),(160,52,-45),"body",[0,0,-10],[157,29,-50])
-cube("winglet_r_blue",(154,45,-55),(160,53,-45),"blue",[0,0,-10],[157,29,-50])
-
-hstab_mesh("hstab_left_smooth",-1)
-hstab_mesh("hstab_right_smooth",1)
-
-vpts=[
-    (-5,49,-166),(5,49,-166),(-4,94,-151),(4,94,-151),(-2,114,-143),(2,114,-143),
-    (-5,47,-166),(5,47,-166),(-4,92,-151),(4,92,-151),(-2,112,-143),(2,112,-143)
-]
-vq=[
-    (0,2,3,1),(2,4,5,3),
-    (7,9,8,6),(9,11,10,8),
-    (0,6,8,2),(2,8,10,4),
-    (1,3,9,7),(3,5,11,9),(4,10,11,5)
-]
-mesh("vertical_tail_smooth",vpts,vq,"body")
-cube("vstab_blue",(-4,88,-159),(4,111,-144),"blue",[-8,0,0],[0,88,-151])
-
-for prefix,x,y,z in (
-    ("eng1",-100,12,-25),
-    ("eng2",-55,13,-10),
-    ("eng3",55,13,-10),
-    ("eng4",100,12,-25),
-):
-    cube(prefix+"_pylon",(x-5,y+14,z-9),(x+5,y+34,z+10),"metal",[-10,0,0],[x,y+20,z])
-    nacelle_mesh(prefix,x,y,z)
-
-# Passenger doors, upper-deck doors, cargo doors and handles.
+    x=side*3.29
+    for i,z in enumerate((25.0,12.5,-8.0,-24.0),1):
+        cube_m(f"door_{'L' if side<0 else 'R'}{i}",((x-.045 if side<0 else x-.015),6.25,z-.48),(x+.015 if side<0 else x+.045,8.85,z+.48),"pearl2")
+        cube_m("door_handle",((x-.06 if side<0 else x-.01),7.28,z+.24),(x+.01 if side<0 else x+.06,7.38,z+.42),"darkmetal")
+# Upper-deck forward doors
 for side in (-1,1):
-    xa, xb = ((-29.6,-28.2) if side < 0 else (28.2,29.6))
-    for i,z in enumerate((100,42,-38,-98),1):
-        cube("door_"+("L" if side<0 else "R")+str(i),(xa,23,z-6),(xb,52,z+6),"body2")
-        hx1,hx2 = ((-30.1,-29.6) if side<0 else (29.6,30.1))
-        cube("door_handle",(hx1,35,z+2),(hx2,38,z+5),"dark")
-    ux1,ux2 = ((-24,-22.5) if side<0 else (22.5,24))
-    cube("upper_door",(ux1,63,93),(ux2,76,103),"body2")
+    x=side*2.93
+    cube_m("upper_door",((x-.04 if side<0 else x-.015),10.55,23.5),(x+.015 if side<0 else x+.04,12.55,24.35),"pearl2")
 
-cube("cargo_door_1",(28.2,22,15),(29.8,36,48),"body2")
-cube("cargo_door_2",(28.2,22,-83),(29.8,36,-48),"body2")
-for z in (15,48,-83,-48):
-    cube("cargo_frame",(29.8,22,z-1),(30.3,36,z+1),"dark")
+# Lower cargo doors on right side.
+cube_m("cargo_door_forward",(3.24,5.35,8.5),(3.31,6.65,14.3),"pearl2")
+cube_m("cargo_door_aft",(3.24,5.35,-20.0),(3.31,6.65,-14.0),"pearl2")
 
-# Visible interior.
-cube("cabin_floor",(-23,20,-115),(23,22,118),"dark")
-cube("aisle",(-4,22,-112),(4,22.8,112),"tan")
-cube("cabin_ceiling",(-21,54,-112),(21,56,112),"body2")
+# ---------------------------------------------------------------------------
+# Interior: real cockpit/cabin exists in the SAME full model used by 1st/3rd person.
+# ---------------------------------------------------------------------------
+# Main cabin floors/ceiling
+cube_m("main_cabin_floor",(-2.85,5.35,-27.0),(2.85,5.48,25.8),"floor")
+cube_m("main_cabin_ceiling",(-2.80,9.48,-27.0),(2.80,9.62,25.0),"pearl2")
+cube_m("upper_cabin_floor",(-2.25,10.25,16.6),(2.25,10.38,28.7),"floor")
+cube_m("upper_cabin_ceiling",(-2.00,12.72,18.0),(2.00,12.84,27.4),"pearl2")
 
-# Secondary inner roof skins sit just under the exterior mesh. They are not
-# visible from normal side views, but prevent sky/top-down views from seeing
-# through microscopic mesh/window seams into an empty cabin.
-cube("main_cabin_inner_roof",(-22.8,56.0,-122),(22.8,58.2,122),"body2")
-cube("upper_cabin_inner_roof",(-17.8,75.0,42),(17.8,77.3,124),"body2")
-cube("hump_aft_blend_liner",(-17.0,57.0,20),(17.0,61.5,48),"body2")
-cube("hump_forward_blend_liner",(-15.0,57.0,120),(15.0,61.8,145),"body2")
-for z in (-72,-24,24,72):
-    for x in (-15,-8,8,15):
-        cube("seat_base",(x-3,22,z-3),(x+3,27,z+3),"seat")
-        cube("seat_back",(x-3,27,z-2),(x+3,39,z+1),"seat",[-6,0,0],[x,27,z])
-for x in (-8,8):
-    cube("pilot_seat",(x-4,23,132),(x+4,37,140),"seat")
-cube("cockpit_console",(-15,23,145),(15,36,154),"dark",[-10,0,0],[0,24,145])
+# Cabin wall liners behind transparent windows; dark lower strip gives depth.
+for side in (-1,1):
+    x=side*3.04
+    cube_m("cabin_side_liner",((x-.03 if side<0 else x-.01),6.0,-27.0),(x+.01 if side<0 else x+.03,9.2,25.8),"pearl2")
 
-# Antennas, pitot tubes and flap-track fairings.
-for z in (25,-25,-75):
-    cube("antenna",(-2,61,z-3),(2,72,z+3),"body2",[-18,0,0],[0,61,z])
-for z in (55,-55):
-    cube("belly_antenna",(-2,8,z-3),(2,13,z+3),"dark",[18,0,0],[0,13,z])
-cube("pitot_l",(-26,38,151),(-20,40,166),"metal",[0,-8,0],[-23,39,151])
-cube("pitot_r",(20,38,151),(26,40,166),"metal",[0,8,0],[23,39,151])
-for x in (-115,-75,-35,35,75,115):
-    cube("flap_fairing",(x-3,23,-43),(x+3,29,-18),"body2")
+# Cabin seats as representative rows visible through windows, not hundreds of heavy entities.
+for z in (-22,-15,-8,-1,6,13,20):
+    for x in (-2.15,-1.35,1.35,2.15):
+        cube_m("seat_base",(x-.28,5.48,z-.28),(x+.28,5.78,z+.28),"seat")
+        cube_m("seat_back",(x-.30,5.72,z-.18),(x+.30,6.62,z+.04),"seat",[-6,0,0],[x,5.72,z])
 
-model = {
+# Flight deck is physically placed behind the real windshield opening.
+cube_m("cockpit_floor",(-2.45,8.55,25.8),(2.45,8.68,32.8),"floor")
+cube_m("cockpit_rear_bulkhead",(-2.50,8.60,25.7),(2.50,11.9,25.85),"pearl2")
+cube_m("instrument_panel",(-2.25,9.18,29.15),(2.25,9.78,30.25),"darkmetal",[-9,0,0],[0,9.25,29.2])
+cube_m("glare_shield",(-2.35,9.73,29.05),(2.35,9.91,30.15),"black",[-7,0,0],[0,9.7,29.1])
+cube_m("center_pedestal",(-.48,8.70,26.7),(.48,9.35,29.05),"darkmetal")
+cube_m("overhead_panel",(-1.75,11.28,27.0),(1.75,11.45,29.6),"darkmetal",[8,0,0],[0,11.3,28.2])
+# windshield frames around the actual hole, leaving forward center unobstructed
+for x in (-2.45,2.45):
+    cube_m("cockpit_a_pillar",(x-.08,9.55,29.0),(x+.08,11.25,31.4),"darkmetal",[-8,0,-8 if x<0 else 8],[x,9.6,29.2])
+cube_m("cockpit_center_post",(-.07,9.62,30.0),(.07,11.18,31.7),"darkmetal",[-6,0,0],[0,9.65,30.0])
+cube_m("cockpit_lower_sill",(-2.55,9.43,29.65),(2.55,9.58,31.25),"pearl2",[-5,0,0],[0,9.45,29.7])
+# pilot / copilot seats
+for x in (-.82,.82):
+    cube_m("pilot_seat_base",(x-.38,8.70,26.7),(x+.38,9.10,27.55),"seat")
+    cube_m("pilot_seat_back",(x-.40,9.05,26.65),(x+.40,10.25,27.05),"seat",[-5,0,0],[x,9.05,26.8])
+# instrument screens
+for x in (-1.55,-.75,.05,.85,1.55):
+    cube_m("cockpit_screen",(x-.27,9.58,29.42),(x+.27,9.94,29.49),"screen",[-8,0,0],[x,9.6,29.4])
+
+# Antennas/pitots.
+for z in (3.0,-8.0,-19.0):
+    cube_m("top_antenna",(-.08,10.55,z-.18),(.08,11.18,z+.18),"pearl2",[-18,0,0],[0,10.55,z])
+for side in (-1,1):
+    x=side*2.75
+    cube_m("pitot",(x-.06,7.45,31.1),(x+.06,7.58,33.2),"metal",[0,6*side,0],[x,7.5,31.1])
+
+model={
     "meta":{"format_version":"4.10","model_format":"free","box_uv":False},
-    "name":"boeing_747_400", "model_identifier":"",
-    "visible_box":[1,1,0], "variable_placeholders":"",
-    "variable_placeholder_buttons":[], "timeline_setups":[],
-    "unhandled_root_fields":{}, "resolution":{"width":64,"height":64},
-    "elements":elements, "outliner":outliner,
+    "name":"boeing_747_400_v21_1to1","model_identifier":"",
+    "visible_box":[1,1,0],"variable_placeholders":"","variable_placeholder_buttons":[],
+    "timeline_setups":[],"unhandled_root_fields":{},"resolution":{"width":128,"height":128},
+    "elements":elements,"outliner":outliner,
     "textures":[{
-        "path":"boeing_747_400_texture.png",
-        "name":"boeing_747_400_texture.png",
-        "folder":"","namespace":"","id":"0",
-        "width":64,"height":64,"uv_width":64,"uv_height":64,
-        "particle":False,"layers_enabled":False,"sync_to_project":"",
-        "render_mode":"default","render_sides":"auto","frame_time":1,
-        "frame_order_type":"loop","frame_order":"","frame_interpolate":False,
-        "visible":True,"internal":False,"saved":True,"uuid":uid(),
+        "path":"boeing_747_400_texture.png","name":"boeing_747_400_texture.png","folder":"","namespace":"","id":"0",
+        "width":128,"height":128,"uv_width":128,"uv_height":128,"particle":False,"layers_enabled":False,
+        "sync_to_project":"","render_mode":"default","render_sides":"auto","frame_time":1,"frame_order_type":"loop",
+        "frame_order":"","frame_interpolate":False,"visible":True,"internal":False,"saved":True,"uuid":uid(),
         "relative_path":"boeing_747_400_texture.png"
     }]
 }
-(OBJECTS / "boeing_747_400.bbmodel").write_text(
-    json.dumps(model, separators=(",",":")), encoding="utf-8"
-)
+(OBJECTS/"boeing_747_400.bbmodel").write_text(json.dumps(model,separators=(",",":")),encoding="utf-8")
 
-print("Generated original 747 BBModel elements:", len(elements))
-print("Generated original jet sounds:", len(list(SOUNDS.glob("*.ogg"))))
-print("Generated external texture:", TEXTURES / "boeing_747_400_texture.png")
+print("V2.1 1:1 BBModel elements:",len(elements))
+print("Envelope target: 70.66m length / 64.44m span / 19.41m height")
+print("Generated original jet sounds:",len(list(SOUNDS.glob("*.ogg"))))
